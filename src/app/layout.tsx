@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Acme",
-  description: "A clean, fully responsive landing page starter.",
+  title: "Benar Website",
+  description: "About me.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
