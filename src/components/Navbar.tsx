@@ -1,3 +1,4 @@
+import Link from "next/link";
 import RegisterModal from "@/components/RegisterModal";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -11,6 +12,12 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <ThemeToggle />
+          <Link
+            href="/users"
+            className="rounded-full border border-foreground/15 px-4 py-2 text-sm font-medium transition-colors hover:bg-foreground/10 sm:px-5 sm:text-base"
+          >
+            Users
+          </Link>
           <RegisterModal />
           <button
             type="button"
