@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { getMongoClient } from "@/lib/mongodb";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const DB_NAME = process.env.MONGODB_DB || "benarisais";
 const COLLECTION_NAME = "users";
 
 export async function POST(request: Request) {
@@ -60,7 +59,9 @@ export async function POST(request: Request) {
 
   try {
     const client = await getMongoClient();
-    const db = client.db(DB_NAME);
+    const db = process.env.MONGODB_DB
+      ? client.db(process.env.MONGODB_DB)
+      : client.db();
     await db.collection(COLLECTION_NAME).insertOne({
       name: name.trim(),
       email: trimmedEmail || null,
