@@ -3,15 +3,15 @@ import Image from "next/image";
 export default function Home() {
   return (
     <main className="flex-1">
-      <section className="mx-auto flex max-w-2xl flex-col items-center px-4 py-16 text-center sm:px-6 sm:py-24 lg:px-8 lg:py-32">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+      <section className="mx-auto flex max-w-3xl flex-col items-center px-4 py-16 text-center sm:px-6 sm:py-24 lg:px-8 lg:py-32">
+        <h1 className="text-4xl font-bold tracking-tight md:text-6xl">
           Benar Systems &amp; Hobbies
         </h1>
-        <p className="mt-6 text-base italic leading-relaxed text-foreground/80 sm:text-lg">
+        <p className="mt-2 text-base italic leading-relaxed text-foreground/80 md:text-lg">
           Hi, I&apos;m Ben — I help small businesses automate their processes
           with simple digital solutions.
         </p>
-        <p className="mt-4 max-w-xl text-base leading-relaxed text-foreground/80 sm:text-lg">
+        <p className="mt-4 max-w-2xl text-lg leading-relaxed text-foreground/80 md:text-xl">
           Whether you need a custom business system or just want to talk
           pickleball, feel free to reach out.{" "}
           <strong className="font-semibold text-foreground">
@@ -21,7 +21,7 @@ export default function Home() {
           facilities soon.
         </p>
 
-        <div className="mt-8 flex items-center gap-2 text-base font-medium sm:text-lg">
+        <div className="mt-8 flex items-center gap-2 text-lg font-medium">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
