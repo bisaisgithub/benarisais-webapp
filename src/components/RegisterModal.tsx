@@ -2,22 +2,52 @@
 
 import { useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import PhoneInput, {
+  isValidPhoneNumber,
+  type Value as PhoneValue,
+} from "react-phone-number-input";
 
 const CONTACT_EMAIL = "benaremail@gmail.com";
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function RegisterModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [contact, setContact] = useState("");
+  const [contact, setContact] = useState<PhoneValue | undefined>();
   const [message, setMessage] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [contactError, setContactError] = useState<string | null>(null);
 
   function closeModal() {
     setIsOpen(false);
   }
 
+  function validateEmail(value: string) {
+    const error = EMAIL_REGEX.test(value)
+      ? null
+      : "Enter a valid email address.";
+    setEmailError(error);
+    return error === null;
+  }
+
+  function validateContact(value: PhoneValue | undefined) {
+    const error =
+      value && isValidPhoneNumber(value)
+        ? null
+        : "Enter a valid phone number, including country code.";
+    setContactError(error);
+    return error === null;
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const isEmailValid = validateEmail(email);
+    const isContactValid = validateContact(contact);
+    if (!isEmailValid || !isContactValid) {
+      return;
+    }
 
     const subject = `New registration from ${name}`;
     const body = [
@@ -34,8 +64,10 @@ export default function RegisterModal() {
 
     setName("");
     setEmail("");
-    setContact("");
+    setContact(undefined);
     setMessage("");
+    setEmailError(null);
+    setContactError(null);
     closeModal();
   }
 
@@ -83,6 +115,7 @@ export default function RegisterModal() {
 
                 <form
                   onSubmit={handleSubmit}
+                  noValidate
                   className="mt-4 flex flex-col gap-4"
                 >
                   <div className="flex flex-col gap-1">
@@ -114,9 +147,25 @@ export default function RegisterModal() {
                       type="email"
                       required
                       value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      className="rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                      onChange={(event) => {
+                        setEmail(event.target.value);
+                        if (emailError) validateEmail(event.target.value);
+                      }}
+                      onBlur={(event) => validateEmail(event.target.value)}
+                      aria-invalid={emailError ? true : undefined}
+                      aria-describedby={
+                        emailError ? "register-email-error" : undefined
+                      }
+                      className="rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent aria-[invalid=true]:border-red-500"
                     />
+                    {emailError && (
+                      <p
+                        id="register-email-error"
+                        className="text-xs text-red-500"
+                      >
+                        {emailError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-1">
@@ -126,14 +175,36 @@ export default function RegisterModal() {
                     >
                       Contact
                     </label>
-                    <input
+                    <PhoneInput
                       id="register-contact"
-                      type="text"
-                      required
+                      defaultCountry="US"
+                      international
                       value={contact}
-                      onChange={(event) => setContact(event.target.value)}
-                      className="rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                      onChange={(value) => {
+                        setContact(value);
+                        if (contactError) validateContact(value);
+                      }}
+                      onBlur={() => validateContact(contact)}
+                      numberInputProps={{
+                        className:
+                          "min-w-0 flex-1 bg-transparent text-sm outline-none",
+                      }}
+                      aria-invalid={contactError ? true : undefined}
+                      aria-describedby={
+                        contactError ? "register-contact-error" : undefined
+                      }
+                      className={`rounded-lg border px-3 py-2 focus-within:border-accent ${
+                        contactError ? "border-red-500" : "border-foreground/15"
+                      }`}
                     />
+                    {contactError && (
+                      <p
+                        id="register-contact-error"
+                        className="text-xs text-red-500"
+                      >
+                        {contactError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-1">
