@@ -1,3 +1,4 @@
+import RegisterModal from "@/components/RegisterModal";
 import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Navbar() {
@@ -10,6 +11,7 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <ThemeToggle />
+          <RegisterModal />
           <button
             type="button"
             className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 sm:px-5 sm:text-base"
