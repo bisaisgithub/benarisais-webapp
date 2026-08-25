@@ -7,7 +7,6 @@ import PhoneInput, {
   type Value as PhoneValue,
 } from "react-phone-number-input";
 
-const CONTACT_EMAIL = "benaremail@gmail.com";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function RegisterModal() {
@@ -23,9 +22,12 @@ export default function RegisterModal() {
     null,
   );
   const [messageError, setMessageError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function closeModal() {
     setIsOpen(false);
+    setSubmitError(null);
   }
 
   function validateName(value: string) {
@@ -73,7 +75,7 @@ export default function RegisterModal() {
     return error === null;
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const isNameValid = validateName(name);
@@ -92,31 +94,47 @@ export default function RegisterModal() {
       return;
     }
 
-    const subject = `New registration from ${name}`;
-    const body = [
-      `Name: ${name}`,
-      email.trim() ? `Email: ${email.trim()}` : null,
-      contact ? `Contact: ${contact}` : null,
-      "",
-      message,
-    ]
-      .filter((line) => line !== null)
-      .join("\n");
+    setSubmitError(null);
+    setIsSubmitting(true);
 
-    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
-      subject,
-    )}&body=${encodeURIComponent(body)}`;
+    try {
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          contact: contact ?? "",
+          message: message.trim(),
+        }),
+      });
 
-    setName("");
-    setEmail("");
-    setContact(undefined);
-    setMessage("");
-    setNameError(null);
-    setEmailError(null);
-    setContactError(null);
-    setContactMethodError(null);
-    setMessageError(null);
-    closeModal();
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(
+          data?.error || "Something went wrong. Please try again.",
+        );
+      }
+
+      setName("");
+      setEmail("");
+      setContact(undefined);
+      setMessage("");
+      setNameError(null);
+      setEmailError(null);
+      setContactError(null);
+      setContactMethodError(null);
+      setMessageError(null);
+      closeModal();
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -323,11 +341,18 @@ export default function RegisterModal() {
                     )}
                   </div>
 
+                  {submitError && (
+                    <p role="alert" className="text-sm text-red-500">
+                      {submitError}
+                    </p>
+                  )}
+
                   <button
                     type="submit"
-                    className="mt-2 w-full rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
+                    disabled={isSubmitting}
+                    className="mt-2 w-full rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Submit
+                    {isSubmitting ? "Submitting…" : "Submit"}
                   </button>
                 </form>
               </div>
