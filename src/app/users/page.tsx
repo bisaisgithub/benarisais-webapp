@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import { getMongoClient } from "@/lib/mongodb";
 
@@ -26,13 +27,6 @@ function parsePositiveInt(value: string | undefined, fallback: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
-}
-
-function formatDate(value: Date) {
-  return new Date(value).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
 }
 
 export default async function UsersPage(props: PageProps<"/users">) {
@@ -130,7 +124,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
                         {user.message}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-foreground/60">
-                        {formatDate(user.createdAt)}
+                        <LocalDate value={user.createdAt.toISOString()} />
                       </td>
                     </tr>
                   ))}
