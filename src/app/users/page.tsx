@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
+import TypesModal from "@/components/TypesModal";
 import { getMongoClient } from "@/lib/mongodb";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -86,7 +87,10 @@ export default async function UsersPage(props: PageProps<"/users">) {
               {total} {total === 1 ? "registration" : "registrations"}
             </p>
           </div>
-          <PageSizeSelect pageSize={pageSize} />
+          <div className="flex items-center gap-3">
+            <TypesModal />
+            <PageSizeSelect pageSize={pageSize} />
+          </div>
         </div>
 
         {errorMessage ? (
