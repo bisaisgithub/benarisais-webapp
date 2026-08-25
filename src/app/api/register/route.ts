@@ -4,7 +4,7 @@ import { getMongoClient } from "@/lib/mongodb";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DB_NAME = process.env.MONGODB_DB || "benarisais";
-const COLLECTION_NAME = "registrations";
+const COLLECTION_NAME = "users";
 
 export async function POST(request: Request) {
   let body: unknown;
