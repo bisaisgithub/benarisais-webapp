@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import EditUserModal from "@/components/EditUserModal";
 import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import TypesModal from "@/components/TypesModal";
@@ -15,6 +16,11 @@ interface UserRecord {
   contact: string | null;
   message: string;
   createdAt: Date;
+  types?: unknown[];
+}
+
+interface UserTypeRecord {
+  text: string;
 }
 
 function firstValue(value: string | string[] | undefined) {
@@ -47,6 +53,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
   );
 
   let users: (UserRecord & { _id: unknown })[] = [];
+  let userTypes: (UserTypeRecord & { _id: unknown })[] = [];
   let total = 0;
   let page = requestedPage;
   let errorMessage: string | null = null;
@@ -68,10 +75,24 @@ export default async function UsersPage(props: PageProps<"/users">) {
       .skip((page - 1) * pageSize)
       .limit(pageSize)
       .toArray();
+
+    userTypes = await db
+      .collection<UserTypeRecord>("user-types")
+      .find()
+      .sort({ text: 1 })
+      .toArray();
   } catch (error) {
     console.error("Failed to load users:", error);
     errorMessage = "Could not load users. Please try again later.";
   }
+
+  const availableTypes = userTypes.map((type) => ({
+    _id: String(type._id),
+    text: type.text,
+  }));
+  const typeTextById = new Map(
+    availableTypes.map((type) => [type._id, type.text]),
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -109,29 +130,68 @@ export default async function UsersPage(props: PageProps<"/users">) {
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">Contact</th>
                     <th className="px-4 py-3 font-medium">Message</th>
+                    <th className="px-4 py-3 font-medium">Types</th>
                     <th className="px-4 py-3 font-medium">Registered</th>
+                    <th className="px-4 py-3 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
-                    <tr
-                      key={String(user._id)}
-                      className="border-b border-foreground/10 last:border-0"
-                    >
-                      <td className="px-4 py-3">{user.name}</td>
-                      <td className="px-4 py-3">{user.email ?? "—"}</td>
-                      <td className="px-4 py-3">{user.contact ?? "—"}</td>
-                      <td
-                        className="max-w-xs truncate px-4 py-3"
-                        title={user.message}
+                  {users.map((user) => {
+                    const id = String(user._id);
+                    const typeIds = (user.types ?? []).map((typeId) =>
+                      String(typeId),
+                    );
+                    const typeTexts = typeIds
+                      .map((typeId) => typeTextById.get(typeId))
+                      .filter((text): text is string => Boolean(text));
+
+                    return (
+                      <tr
+                        key={id}
+                        className="border-b border-foreground/10 last:border-0"
                       >
-                        {user.message}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-foreground/60">
-                        <LocalDate value={user.createdAt.toISOString()} />
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-4 py-3">{user.name}</td>
+                        <td className="px-4 py-3">{user.email ?? "—"}</td>
+                        <td className="px-4 py-3">{user.contact ?? "—"}</td>
+                        <td
+                          className="max-w-xs truncate px-4 py-3"
+                          title={user.message}
+                        >
+                          {user.message}
+                        </td>
+                        <td className="px-4 py-3">
+                          {typeTexts.length === 0 ? (
+                            "—"
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {typeTexts.map((text) => (
+                                <span
+                                  key={text}
+                                  className="inline-flex items-center rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent"
+                                >
+                                  {text}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-foreground/60">
+                          <LocalDate value={user.createdAt.toISOString()} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <EditUserModal
+                            id={id}
+                            name={user.name}
+                            email={user.email}
+                            contact={user.contact}
+                            message={user.message}
+                            typeIds={typeIds}
+                            availableTypes={availableTypes}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
