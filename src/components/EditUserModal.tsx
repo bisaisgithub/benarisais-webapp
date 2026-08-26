@@ -9,6 +9,7 @@ import PhoneInput, {
 } from "react-phone-number-input";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
 
 interface UserTypeOption {
   _id: string;
@@ -56,6 +57,11 @@ export default function EditUserModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
   function openModal() {
     setName(initialName);
     setEmail(initialEmail ?? "");
@@ -68,6 +74,9 @@ export default function EditUserModal({
     setContactMethodError(null);
     setMessageError(null);
     setSubmitError(null);
+    setNewPassword("");
+    setPasswordError(null);
+    setPasswordSuccess(false);
     setIsOpen(true);
   }
 
@@ -126,6 +135,45 @@ export default function EditUserModal({
         ? current.filter((current_) => current_ !== typeId)
         : [...current, typeId],
     );
+  }
+
+  async function handleResetPassword() {
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      setPasswordError(
+        `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+      );
+      return;
+    }
+
+    setPasswordError(null);
+    setPasswordSuccess(false);
+    setIsResettingPassword(true);
+
+    try {
+      const response = await fetch(`/api/users/${id}/password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(
+          data?.error || "Could not reset password. Please try again.",
+        );
+      }
+
+      setNewPassword("");
+      setPasswordSuccess(true);
+    } catch (error) {
+      setPasswordError(
+        error instanceof Error
+          ? error.message
+          : "Could not reset password. Please try again.",
+      );
+    } finally {
+      setIsResettingPassword(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -379,6 +427,39 @@ export default function EditUserModal({
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 rounded-lg border border-foreground/15 p-3">
+                    <span className="text-sm font-medium">Reset Password</span>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => {
+                        setNewPassword(event.target.value);
+                        setPasswordSuccess(false);
+                        if (passwordError) setPasswordError(null);
+                      }}
+                      placeholder="New password"
+                      autoComplete="new-password"
+                      aria-invalid={passwordError ? true : undefined}
+                      className="rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent aria-[invalid=true]:border-red-500"
+                    />
+                    {passwordError && (
+                      <p className="text-xs text-red-500">{passwordError}</p>
+                    )}
+                    {passwordSuccess && (
+                      <p className="text-xs text-emerald-600">
+                        Password updated.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleResetPassword}
+                      disabled={isResettingPassword}
+                      className="self-start rounded-full border border-foreground/15 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-foreground/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isResettingPassword ? "Resetting…" : "Reset"}
+                    </button>
                   </div>
 
                   {submitError && (
