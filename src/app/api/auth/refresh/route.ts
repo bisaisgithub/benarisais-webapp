@@ -71,14 +71,7 @@ export async function POST(request: Request) {
     const types = await resolveUserTypes(db, user.types);
     const activeType = getActiveType(types);
 
-    const accessToken = signAccessToken({
-      sub: userId,
-      name: user.name,
-      email: user.email,
-      contact: user.contact,
-      types,
-      activeType,
-    });
+    const accessToken = signAccessToken(userId);
 
     return NextResponse.json({
       accessToken,

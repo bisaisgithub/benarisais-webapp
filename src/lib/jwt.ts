@@ -3,18 +3,8 @@ import jwt from "jsonwebtoken";
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL = "30d";
 
-export interface UserTypeClaim {
-  _id: string;
-  text: string;
-}
-
 export interface AccessTokenPayload {
   sub: string;
-  name: string;
-  email: string | null;
-  contact: string | null;
-  types: UserTypeClaim[];
-  activeType: UserTypeClaim | null;
 }
 
 export interface RefreshTokenPayload {
@@ -37,8 +27,10 @@ function getRefreshSecret() {
   return secret;
 }
 
-export function signAccessToken(payload: AccessTokenPayload) {
-  return jwt.sign(payload, getAccessSecret(), { expiresIn: ACCESS_TOKEN_TTL });
+export function signAccessToken(userId: string) {
+  return jwt.sign({ sub: userId }, getAccessSecret(), {
+    expiresIn: ACCESS_TOKEN_TTL,
+  });
 }
 
 export function signRefreshToken(userId: string) {
