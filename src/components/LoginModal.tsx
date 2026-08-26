@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -13,6 +14,7 @@ import {
   getAccessToken,
   getServerUserJson,
   getStoredUserJson,
+  refreshSession,
   setSession,
   subscribeAuth,
   updateUserAndAccessToken,
@@ -41,6 +43,10 @@ export default function LoginModal() {
       return null;
     }
   }, [storedUserJson]);
+
+  useEffect(() => {
+    refreshSession();
+  }, []);
 
   function openModal() {
     setIdentifier("");

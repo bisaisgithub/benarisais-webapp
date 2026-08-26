@@ -88,3 +88,38 @@ export function clearSession() {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   emitChange();
 }
+
+/**
+ * Exchanges the stored refresh token for a new access token, applying the
+ * user record the server returns alongside it — this is where name/types/
+ * activeType pick up any changes an admin made since the last login or
+ * refresh. Clears the session if the refresh token itself is invalid or
+ * expired. Returns whether it succeeded.
+ */
+export async function refreshSession(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    return false;
+  }
+
+  try {
+    const response = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        clearSession();
+      }
+      return false;
+    }
+
+    const data = await response.json();
+    updateUserAndAccessToken(data.user, data.accessToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
