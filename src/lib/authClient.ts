@@ -9,7 +9,6 @@ export interface AuthUser {
   email: string | null;
   contact: string | null;
   types: UserTypeClaim[];
-  activeType: UserTypeClaim | null;
 }
 
 const ACCESS_TOKEN_KEY = "accessToken";
@@ -91,10 +90,10 @@ export function clearSession() {
 
 /**
  * Exchanges the stored refresh token for a new access token, applying the
- * user record the server returns alongside it — this is where name/types/
- * activeType pick up any changes an admin made since the last login or
- * refresh. Clears the session if the refresh token itself is invalid or
- * expired. Returns whether it succeeded.
+ * user record the server returns alongside it — this is where name/types
+ * pick up any changes an admin made since the last login or refresh.
+ * Clears the session if the refresh token itself is invalid or expired.
+ * Returns whether it succeeded.
  */
 export async function refreshSession(): Promise<boolean> {
   const refreshToken = getRefreshToken();

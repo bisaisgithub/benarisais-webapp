@@ -145,13 +145,12 @@ export default function LoginModal() {
           <span className="text-sm text-foreground/70">Hi, {user.name}</span>
           {user.types.length > 0 && (
             <select
-              value={user.activeType?._id ?? ""}
+              value={user.types[0]._id}
               onChange={handleActiveTypeChange}
               disabled={isSwitchingType}
               aria-label="Active type"
               className="rounded-lg border border-foreground/15 bg-transparent px-2 py-1 text-sm outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {!user.activeType && <option value="">Select type</option>}
               {user.types.map((type) => (
                 <option key={type._id} value={type._id}>
                   {type.text}

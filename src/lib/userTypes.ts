@@ -34,8 +34,3 @@ export async function resolveUserTypes(
     .filter((id) => textById.has(id))
     .map((id) => ({ _id: id, text: textById.get(id)! }));
 }
-
-/** The first entry in an (order-preserved) types array is the active type. */
-export function getActiveType(types: UserTypeClaim[]): UserTypeClaim | null {
-  return types[0] ?? null;
-}

@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { getBearerToken, signAccessToken, verifyAccessToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
-import { getActiveType, resolveUserTypes } from "@/lib/userTypes";
+import { resolveUserTypes } from "@/lib/userTypes";
 
 const COLLECTION_NAME = "users";
 
@@ -97,7 +97,6 @@ export async function PUT(request: Request) {
     );
 
     const types = await resolveUserTypes(db, reorderedTypeIds);
-    const activeType = getActiveType(types);
 
     const accessToken = signAccessToken(userId);
 
@@ -109,7 +108,6 @@ export async function PUT(request: Request) {
         email: user.email,
         contact: user.contact,
         types,
-        activeType,
       },
     });
   } catch (error) {
