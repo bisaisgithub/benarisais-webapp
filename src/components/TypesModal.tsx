@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { getAccessToken } from "@/lib/authClient";
 
 interface UserType {
   _id: string;
@@ -76,9 +77,17 @@ export default function TypesModal() {
     setIsAdding(true);
     setAddError(null);
     try {
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        throw new Error("You must be signed in as an admin to add a type.");
+      }
+
       const response = await fetch("/api/users/types", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ text: trimmedQuery }),
       });
       const data = await response.json().catch(() => null);
@@ -119,9 +128,17 @@ export default function TypesModal() {
     setIsSavingEdit(true);
     setEditError(null);
     try {
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        throw new Error("You must be signed in as an admin to rename a type.");
+      }
+
       const response = await fetch("/api/users/types", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ id: editingId, text: trimmedEditingText }),
       });
       const data = await response.json().catch(() => null);
