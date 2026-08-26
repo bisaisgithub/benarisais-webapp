@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LoginModal from "@/components/LoginModal";
 import RegisterModal from "@/components/RegisterModal";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -19,12 +20,7 @@ export default function Navbar() {
             Users
           </Link>
           <RegisterModal />
-          <button
-            type="button"
-            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 sm:px-5 sm:text-base"
-          >
-            Sign In
-          </button>
+          <LoginModal />
         </div>
       </nav>
     </header>
