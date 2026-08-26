@@ -5,6 +5,12 @@ export interface UserTypeClaim {
   text: string;
 }
 
+/**
+ * Resolves a user's `types` ObjectId array into { _id, text } objects,
+ * preserving the input order — MongoDB's $in does not guarantee result
+ * order matches the query array, and index 0 carries meaning here (it's
+ * the user's currently active type).
+ */
 export async function resolveUserTypes(
   db: Db,
   typeIds: unknown[] | undefined,
@@ -22,16 +28,14 @@ export async function resolveUserTypes(
     .find({ _id: { $in: ids.map((id) => new ObjectId(id)) } })
     .toArray();
 
-  return docs.map((doc) => ({ _id: doc._id.toString(), text: doc.text }));
+  const textById = new Map(docs.map((doc) => [doc._id.toString(), doc.text]));
+
+  return ids
+    .filter((id) => textById.has(id))
+    .map((id) => ({ _id: id, text: textById.get(id)! }));
 }
 
-export function resolveActiveType(
-  types: UserTypeClaim[],
-  activeTypeId: unknown,
-): UserTypeClaim | null {
-  if (!activeTypeId) {
-    return null;
-  }
-  const id = String(activeTypeId);
-  return types.find((type) => type._id === id) ?? null;
+/** The first entry in an (order-preserved) types array is the active type. */
+export function getActiveType(types: UserTypeClaim[]): UserTypeClaim | null {
+  return types[0] ?? null;
 }

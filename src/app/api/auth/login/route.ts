@@ -3,7 +3,7 @@ import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { NextResponse } from "next/server";
 import { signAccessToken, signRefreshToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
-import { resolveActiveType, resolveUserTypes } from "@/lib/userTypes";
+import { getActiveType, resolveUserTypes } from "@/lib/userTypes";
 
 const COLLECTION_NAME = "users";
 const INVALID_CREDENTIALS_MESSAGE = "Invalid email/contact or password.";
@@ -14,7 +14,6 @@ interface UserDocument {
   contact: string | null;
   password?: string;
   types?: unknown[];
-  activeType?: unknown;
 }
 
 function escapeRegExp(value: string) {
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
 
     const userId = user._id.toString();
     const types = await resolveUserTypes(db, user.types);
-    const activeType = resolveActiveType(types, user.activeType);
+    const activeType = getActiveType(types);
 
     const accessToken = signAccessToken({
       sub: userId,

@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { getBearerToken, signAccessToken, verifyAccessToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
-import { resolveUserTypes } from "@/lib/userTypes";
+import { getActiveType, resolveUserTypes } from "@/lib/userTypes";
 
 const COLLECTION_NAME = "users";
 
@@ -85,13 +85,19 @@ export async function PUT(request: Request) {
       );
     }
 
+    // The selected type moves to index 0; the rest keep their relative order.
+    const reorderedTypeIds = [
+      typeId,
+      ...assignedTypeIds.filter((id) => id !== typeId),
+    ];
+
     await collection.updateOne(
       { _id: objectId },
-      { $set: { activeType: new ObjectId(typeId) } },
+      { $set: { types: reorderedTypeIds.map((id) => new ObjectId(id)) } },
     );
 
-    const types = await resolveUserTypes(db, user.types);
-    const activeType = types.find((type) => type._id === typeId) ?? null;
+    const types = await resolveUserTypes(db, reorderedTypeIds);
+    const activeType = getActiveType(types);
 
     const accessToken = signAccessToken({
       sub: userId,
