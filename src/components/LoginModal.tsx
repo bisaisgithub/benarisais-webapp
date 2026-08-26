@@ -85,10 +85,8 @@ export default function LoginModal() {
 
   if (user) {
     return (
-      <div className="flex items-center gap-2">
-        <span className="hidden text-sm text-foreground/70 sm:inline">
-          Hi, {user.name}
-        </span>
+      <div className="flex items-center justify-between gap-2 sm:justify-start">
+        <span className="text-sm text-foreground/70">Hi, {user.name}</span>
         <button
           type="button"
           onClick={handleLogout}
