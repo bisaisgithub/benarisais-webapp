@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { NextResponse } from "next/server";
+import { setAccessTokenCookie, setRefreshTokenCookie } from "@/lib/authCookies";
 import { signAccessToken, signRefreshToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
 import { resolveUserTypes } from "@/lib/userTypes";
@@ -97,9 +98,7 @@ export async function POST(request: Request) {
     const accessToken = signAccessToken(userId);
     const refreshToken = signRefreshToken(userId);
 
-    return NextResponse.json({
-      accessToken,
-      refreshToken,
+    const response = NextResponse.json({
       user: {
         _id: userId,
         name: user.name,
@@ -108,6 +107,9 @@ export async function POST(request: Request) {
         types,
       },
     });
+    setAccessTokenCookie(response, accessToken);
+    setRefreshTokenCookie(response, refreshToken);
+    return response;
   } catch (error) {
     console.error("Failed to log in:", error);
     return NextResponse.json(

@@ -1,5 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
-import { getBearerToken, verifyAccessToken } from "@/lib/jwt";
+import type { NextRequest } from "next/server";
+import { getAccessTokenFromRequest } from "@/lib/authCookies";
+import { verifyAccessToken } from "@/lib/jwt";
 
 const ADMIN_TYPE_TEXT = "Admin";
 
@@ -12,24 +14,24 @@ export interface AuthCheckError {
   status: number;
 }
 
-/** Verifies the bearer token only — no database access. */
+/** Verifies the access token cookie only — no database access. */
 export function getAuthenticatedUserId(
-  request: Request,
+  request: NextRequest,
 ): AuthCheckResult | AuthCheckError {
-  const token = getBearerToken(request);
+  const token = getAccessTokenFromRequest(request);
   if (!token) {
-    return { error: "Missing access token.", status: 401 };
+    return { error: "Not signed in.", status: 401 };
   }
 
   let userId: string;
   try {
     userId = verifyAccessToken(token).sub;
   } catch {
-    return { error: "Invalid or expired access token.", status: 401 };
+    return { error: "Session expired. Please sign in again.", status: 401 };
   }
 
   if (!ObjectId.isValid(userId)) {
-    return { error: "Invalid or expired access token.", status: 401 };
+    return { error: "Session expired. Please sign in again.", status: 401 };
   }
 
   return { userId };

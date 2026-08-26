@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
 
@@ -43,7 +43,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
     return NextResponse.json(
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
     return NextResponse.json(

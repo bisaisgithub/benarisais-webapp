@@ -1,6 +1,8 @@
 import { ObjectId } from "mongodb";
-import { NextResponse } from "next/server";
-import { getBearerToken, signAccessToken, verifyAccessToken } from "@/lib/jwt";
+import { NextResponse, type NextRequest } from "next/server";
+import { setAccessTokenCookie } from "@/lib/authCookies";
+import { getAuthenticatedUserId } from "@/lib/authz";
+import { signAccessToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
 import { resolveUserTypes } from "@/lib/userTypes";
 
@@ -13,31 +15,15 @@ interface UserDocument {
   types?: unknown[];
 }
 
-export async function PUT(request: Request) {
-  const token = getBearerToken(request);
-  if (!token) {
+export async function PUT(request: NextRequest) {
+  const authCheck = getAuthenticatedUserId(request);
+  if ("error" in authCheck) {
     return NextResponse.json(
-      { error: "Missing access token." },
-      { status: 401 },
+      { error: authCheck.error },
+      { status: authCheck.status },
     );
   }
-
-  let userId: string;
-  try {
-    userId = verifyAccessToken(token).sub;
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid or expired access token." },
-      { status: 401 },
-    );
-  }
-
-  if (!ObjectId.isValid(userId)) {
-    return NextResponse.json(
-      { error: "Invalid or expired access token." },
-      { status: 401 },
-    );
-  }
+  const { userId } = authCheck;
 
   let body: unknown;
   try {
@@ -100,8 +86,7 @@ export async function PUT(request: Request) {
 
     const accessToken = signAccessToken(userId);
 
-    return NextResponse.json({
-      accessToken,
+    const response = NextResponse.json({
       user: {
         _id: userId,
         name: user.name,
@@ -110,6 +95,8 @@ export async function PUT(request: Request) {
         types,
       },
     });
+    setAccessTokenCookie(response, accessToken);
+    return response;
   } catch (error) {
     console.error("Failed to switch active type:", error);
     return NextResponse.json(

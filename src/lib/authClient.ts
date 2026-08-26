@@ -11,8 +11,6 @@ export interface AuthUser {
   types: UserTypeClaim[];
 }
 
-const ACCESS_TOKEN_KEY = "accessToken";
-const REFRESH_TOKEN_KEY = "refreshToken";
 const USER_KEY = "authUser";
 
 type Listener = () => void;
@@ -43,80 +41,46 @@ export function getServerUserJson(): string | null {
   return null;
 }
 
-export function getAccessToken(): string | null {
-  try {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function getRefreshToken(): string | null {
-  try {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setSession(
-  user: AuthUser,
-  accessToken: string,
-  refreshToken: string,
-) {
+export function setUser(user: AuthUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
   emitChange();
 }
 
-export function setAccessToken(accessToken: string) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  emitChange();
-}
-
-export function updateUserAndAccessToken(user: AuthUser, accessToken: string) {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  emitChange();
-}
-
-export function clearSession() {
+export function clearUser() {
   localStorage.removeItem(USER_KEY);
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
   emitChange();
+}
+
+/** Clears the session cookies server-side, then clears the cached profile. */
+export async function logout(): Promise<void> {
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch {
+    // Best-effort — clear the local profile regardless.
+  }
+  clearUser();
 }
 
 /**
- * Exchanges the stored refresh token for a new access token, applying the
- * user record the server returns alongside it — this is where name/types
- * pick up any changes an admin made since the last login or refresh.
- * Clears the session if the refresh token itself is invalid or expired.
- * Returns whether it succeeded.
+ * Exchanges the refresh token cookie for a new access token cookie, applying
+ * the user record the server returns alongside it — this is where
+ * name/types pick up any changes an admin made since the last login or
+ * refresh. Clears the cached profile if the refresh token itself is invalid
+ * or expired. Returns whether it succeeded.
  */
 export async function refreshSession(): Promise<boolean> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    return false;
-  }
-
   try {
-    const response = await fetch("/api/auth/refresh", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
+    const response = await fetch("/api/auth/refresh", { method: "POST" });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        clearSession();
+      if (response.status === 401 || response.status === 400) {
+        clearUser();
       }
       return false;
     }
 
     const data = await response.json();
-    updateUserAndAccessToken(data.user, data.accessToken);
+    setUser(data.user);
     return true;
   } catch {
     return false;

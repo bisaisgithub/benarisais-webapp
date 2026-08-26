@@ -1,5 +1,10 @@
 import { ObjectId } from "mongodb";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  clearAuthCookies,
+  getRefreshTokenFromRequest,
+  setAccessTokenCookie,
+} from "@/lib/authCookies";
 import { signAccessToken, verifyRefreshToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
 import { resolveUserTypes } from "@/lib/userTypes";
@@ -14,26 +19,9 @@ interface UserDocument {
   types?: unknown[];
 }
 
-export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body." },
-      { status: 400 },
-    );
-  }
-
-  if (typeof body !== "object" || body === null) {
-    return NextResponse.json(
-      { error: "Invalid request body." },
-      { status: 400 },
-    );
-  }
-
-  const { refreshToken } = body as Record<string, unknown>;
-  if (typeof refreshToken !== "string" || !refreshToken) {
+export async function POST(request: NextRequest) {
+  const refreshToken = getRefreshTokenFromRequest(request);
+  if (!refreshToken) {
     return NextResponse.json(
       { error: "Refresh token is required." },
       { status: 400 },
@@ -44,11 +32,21 @@ export async function POST(request: Request) {
   try {
     userId = verifyRefreshToken(refreshToken).sub;
   } catch {
-    return NextResponse.json({ error: INVALID_TOKEN_MESSAGE }, { status: 401 });
+    const response = NextResponse.json(
+      { error: INVALID_TOKEN_MESSAGE },
+      { status: 401 },
+    );
+    clearAuthCookies(response);
+    return response;
   }
 
   if (!ObjectId.isValid(userId)) {
-    return NextResponse.json({ error: INVALID_TOKEN_MESSAGE }, { status: 401 });
+    const response = NextResponse.json(
+      { error: INVALID_TOKEN_MESSAGE },
+      { status: 401 },
+    );
+    clearAuthCookies(response);
+    return response;
   }
 
   try {
@@ -62,18 +60,19 @@ export async function POST(request: Request) {
       .findOne({ _id: new ObjectId(userId) });
 
     if (!user) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: INVALID_TOKEN_MESSAGE },
         { status: 401 },
       );
+      clearAuthCookies(response);
+      return response;
     }
 
     const types = await resolveUserTypes(db, user.types);
 
     const accessToken = signAccessToken(userId);
 
-    return NextResponse.json({
-      accessToken,
+    const response = NextResponse.json({
       user: {
         _id: userId,
         name: user.name,
@@ -82,6 +81,8 @@ export async function POST(request: Request) {
         types,
       },
     });
+    setAccessTokenCookie(response, accessToken);
+    return response;
   } catch (error) {
     console.error("Failed to refresh token:", error);
     return NextResponse.json(

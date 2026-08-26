@@ -10,14 +10,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
-  clearSession,
-  getAccessToken,
   getServerUserJson,
   getStoredUserJson,
+  logout,
   refreshSession,
-  setSession,
+  setUser as setStoredUser,
   subscribeAuth,
-  updateUserAndAccessToken,
   type AuthUser,
 } from "@/lib/authClient";
 
@@ -60,7 +58,7 @@ export default function LoginModal() {
   }
 
   function handleLogout() {
-    clearSession();
+    logout();
   }
 
   async function handleActiveTypeChange(event: ChangeEvent<HTMLSelectElement>) {
@@ -71,17 +69,9 @@ export default function LoginModal() {
     setSwitchTypeError(null);
 
     try {
-      const accessToken = getAccessToken();
-      if (!accessToken) {
-        throw new Error("You're not signed in.");
-      }
-
       const response = await fetch("/api/auth/active-type", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ typeId }),
       });
 
@@ -90,7 +80,7 @@ export default function LoginModal() {
         throw new Error(data?.error || "Could not switch type.");
       }
 
-      updateUserAndAccessToken(data.user, data.accessToken);
+      setStoredUser(data.user);
     } catch (switchError) {
       setSwitchTypeError(
         switchError instanceof Error
@@ -125,7 +115,7 @@ export default function LoginModal() {
         throw new Error(data?.error || "Could not log in. Please try again.");
       }
 
-      setSession(data.user, data.accessToken, data.refreshToken);
+      setStoredUser(data.user);
       closeModal();
     } catch (submitError) {
       setError(

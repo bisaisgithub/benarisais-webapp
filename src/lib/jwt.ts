@@ -3,6 +3,9 @@ import jwt from "jsonwebtoken";
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL = "30d";
 
+export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 export interface AccessTokenPayload {
   sub: string;
 }
@@ -45,16 +48,4 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
   return jwt.verify(token, getRefreshSecret()) as RefreshTokenPayload;
-}
-
-export function getBearerToken(request: Request): string | null {
-  const header = request.headers.get("authorization");
-  if (!header) {
-    return null;
-  }
-  const [scheme, token] = header.split(" ");
-  if (scheme !== "Bearer" || !token) {
-    return null;
-  }
-  return token;
 }
