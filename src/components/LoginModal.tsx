@@ -1,13 +1,21 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
+import {
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   clearSession,
+  getAccessToken,
   getServerUserJson,
   getStoredUserJson,
   setSession,
   subscribeAuth,
+  updateUserAndAccessToken,
   type AuthUser,
 } from "@/lib/authClient";
 
@@ -17,6 +25,8 @@ export default function LoginModal() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSwitchingType, setIsSwitchingType] = useState(false);
+  const [switchTypeError, setSwitchTypeError] = useState<string | null>(null);
 
   const storedUserJson = useSyncExternalStore(
     subscribeAuth,
@@ -45,6 +55,45 @@ export default function LoginModal() {
 
   function handleLogout() {
     clearSession();
+  }
+
+  async function handleActiveTypeChange(event: ChangeEvent<HTMLSelectElement>) {
+    const typeId = event.target.value;
+    if (!typeId) return;
+
+    setIsSwitchingType(true);
+    setSwitchTypeError(null);
+
+    try {
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        throw new Error("You're not signed in.");
+      }
+
+      const response = await fetch("/api/auth/active-type", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ typeId }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not switch type.");
+      }
+
+      updateUserAndAccessToken(data.user, data.accessToken);
+    } catch (switchError) {
+      setSwitchTypeError(
+        switchError instanceof Error
+          ? switchError.message
+          : "Could not switch type.",
+      );
+    } finally {
+      setIsSwitchingType(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -85,15 +134,36 @@ export default function LoginModal() {
 
   if (user) {
     return (
-      <div className="flex items-center justify-between gap-2 sm:justify-start">
-        <span className="text-sm text-foreground/70">Hi, {user.name}</span>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 sm:px-5 sm:text-base"
-        >
-          Log Out
-        </button>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-foreground/70">Hi, {user.name}</span>
+          {user.types.length > 0 && (
+            <select
+              value={user.activeType?._id ?? ""}
+              onChange={handleActiveTypeChange}
+              disabled={isSwitchingType}
+              aria-label="Active type"
+              className="rounded-lg border border-foreground/15 bg-transparent px-2 py-1 text-sm outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {!user.activeType && <option value="">Select type</option>}
+              {user.types.map((type) => (
+                <option key={type._id} value={type._id}>
+                  {type.text}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 sm:px-5 sm:text-base"
+          >
+            Log Out
+          </button>
+        </div>
+        {switchTypeError && (
+          <p className="text-xs text-red-500">{switchTypeError}</p>
+        )}
       </div>
     );
   }

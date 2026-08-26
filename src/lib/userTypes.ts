@@ -24,3 +24,14 @@ export async function resolveUserTypes(
 
   return docs.map((doc) => ({ _id: doc._id.toString(), text: doc.text }));
 }
+
+export function resolveActiveType(
+  types: UserTypeClaim[],
+  activeTypeId: unknown,
+): UserTypeClaim | null {
+  if (!activeTypeId) {
+    return null;
+  }
+  const id = String(activeTypeId);
+  return types.find((type) => type._id === id) ?? null;
+}

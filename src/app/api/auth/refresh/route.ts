@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { signAccessToken, verifyRefreshToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
-import { resolveUserTypes } from "@/lib/userTypes";
+import { resolveActiveType, resolveUserTypes } from "@/lib/userTypes";
 
 const COLLECTION_NAME = "users";
 const INVALID_TOKEN_MESSAGE = "Invalid or expired refresh token.";
@@ -12,6 +12,7 @@ interface UserDocument {
   email: string | null;
   contact: string | null;
   types?: unknown[];
+  activeType?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
     }
 
     const types = await resolveUserTypes(db, user.types);
+    const activeType = resolveActiveType(types, user.activeType);
 
     const accessToken = signAccessToken({
       sub: userId,
@@ -76,9 +78,20 @@ export async function POST(request: Request) {
       email: user.email,
       contact: user.contact,
       types,
+      activeType,
     });
 
-    return NextResponse.json({ accessToken });
+    return NextResponse.json({
+      accessToken,
+      user: {
+        _id: userId,
+        name: user.name,
+        email: user.email,
+        contact: user.contact,
+        types,
+        activeType,
+      },
+    });
   } catch (error) {
     console.error("Failed to refresh token:", error);
     return NextResponse.json(

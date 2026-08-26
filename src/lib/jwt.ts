@@ -14,6 +14,7 @@ export interface AccessTokenPayload {
   email: string | null;
   contact: string | null;
   types: UserTypeClaim[];
+  activeType: UserTypeClaim | null;
 }
 
 export interface RefreshTokenPayload {
@@ -52,4 +53,16 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
   return jwt.verify(token, getRefreshSecret()) as RefreshTokenPayload;
+}
+
+export function getBearerToken(request: Request): string | null {
+  const header = request.headers.get("authorization");
+  if (!header) {
+    return null;
+  }
+  const [scheme, token] = header.split(" ");
+  if (scheme !== "Bearer" || !token) {
+    return null;
+  }
+  return token;
 }

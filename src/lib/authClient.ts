@@ -9,6 +9,7 @@ export interface AuthUser {
   email: string | null;
   contact: string | null;
   types: UserTypeClaim[];
+  activeType: UserTypeClaim | null;
 }
 
 const ACCESS_TOKEN_KEY = "accessToken";
@@ -71,6 +72,12 @@ export function setSession(
 }
 
 export function setAccessToken(accessToken: string) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  emitChange();
+}
+
+export function updateUserAndAccessToken(user: AuthUser, accessToken: string) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
   emitChange();
 }
