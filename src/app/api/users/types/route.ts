@@ -1,5 +1,6 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { NextResponse } from "next/server";
+import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
 
 const COLLECTION_NAME = "user-types";
@@ -12,18 +13,21 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function getCollection() {
+async function getDb(): Promise<Db> {
   const client = await getMongoClient();
-  const db = process.env.MONGODB_DB
+  return process.env.MONGODB_DB
     ? client.db(process.env.MONGODB_DB)
     : client.db();
-  return db.collection<UserTypeDocument>(COLLECTION_NAME);
 }
 
 export async function GET() {
   try {
-    const collection = await getCollection();
-    const types = await collection.find().sort({ text: 1 }).toArray();
+    const db = await getDb();
+    const types = await db
+      .collection<UserTypeDocument>(COLLECTION_NAME)
+      .find()
+      .sort({ text: 1 })
+      .toArray();
     return NextResponse.json({
       types: types.map((type) => ({
         _id: type._id.toString(),
@@ -40,35 +44,52 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const authCheck = getAuthenticatedUserId(request);
+  if ("error" in authCheck) {
     return NextResponse.json(
-      { error: "Invalid request body." },
-      { status: 400 },
-    );
-  }
-
-  if (typeof body !== "object" || body === null) {
-    return NextResponse.json(
-      { error: "Invalid request body." },
-      { status: 400 },
-    );
-  }
-
-  const { text } = body as Record<string, unknown>;
-  const trimmedText = typeof text === "string" ? text.trim() : "";
-
-  if (!trimmedText) {
-    return NextResponse.json(
-      { error: "Type name is required." },
-      { status: 400 },
+      { error: authCheck.error },
+      { status: authCheck.status },
     );
   }
 
   try {
-    const collection = await getCollection();
+    const db = await getDb();
+
+    if (!(await isAdmin(db, authCheck.userId))) {
+      return NextResponse.json(
+        { error: "Admin access required." },
+        { status: 403 },
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 },
+      );
+    }
+
+    if (typeof body !== "object" || body === null) {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 },
+      );
+    }
+
+    const { text } = body as Record<string, unknown>;
+    const trimmedText = typeof text === "string" ? text.trim() : "";
+
+    if (!trimmedText) {
+      return NextResponse.json(
+        { error: "Type name is required." },
+        { status: 400 },
+      );
+    }
+
+    const collection = db.collection<UserTypeDocument>(COLLECTION_NAME);
     const existing = await collection.findOne({
       text: { $regex: `^${escapeRegExp(trimmedText)}$`, $options: "i" },
     });
@@ -94,41 +115,58 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const authCheck = getAuthenticatedUserId(request);
+  if ("error" in authCheck) {
     return NextResponse.json(
-      { error: "Invalid request body." },
-      { status: 400 },
-    );
-  }
-
-  if (typeof body !== "object" || body === null) {
-    return NextResponse.json(
-      { error: "Invalid request body." },
-      { status: 400 },
-    );
-  }
-
-  const { id, text } = body as Record<string, unknown>;
-  const trimmedText = typeof text === "string" ? text.trim() : "";
-
-  if (typeof id !== "string" || !ObjectId.isValid(id)) {
-    return NextResponse.json(
-      { error: "A valid type id is required." },
-      { status: 400 },
-    );
-  }
-  if (!trimmedText) {
-    return NextResponse.json(
-      { error: "Type name is required." },
-      { status: 400 },
+      { error: authCheck.error },
+      { status: authCheck.status },
     );
   }
 
   try {
-    const collection = await getCollection();
+    const db = await getDb();
+
+    if (!(await isAdmin(db, authCheck.userId))) {
+      return NextResponse.json(
+        { error: "Admin access required." },
+        { status: 403 },
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 },
+      );
+    }
+
+    if (typeof body !== "object" || body === null) {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 },
+      );
+    }
+
+    const { id, text } = body as Record<string, unknown>;
+    const trimmedText = typeof text === "string" ? text.trim() : "";
+
+    if (typeof id !== "string" || !ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { error: "A valid type id is required." },
+        { status: 400 },
+      );
+    }
+    if (!trimmedText) {
+      return NextResponse.json(
+        { error: "Type name is required." },
+        { status: 400 },
+      );
+    }
+
+    const collection = db.collection<UserTypeDocument>(COLLECTION_NAME);
     const objectId = new ObjectId(id);
 
     const existing = await collection.findOne({
