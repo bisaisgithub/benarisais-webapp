@@ -20,9 +20,25 @@ async function getDb(): Promise<Db> {
     : client.db();
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authCheck = getAuthenticatedUserId(request);
+  if ("error" in authCheck) {
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
+  }
+
   try {
     const db = await getDb();
+
+    if (!(await isAdmin(db, authCheck.userId))) {
+      return NextResponse.json(
+        { error: "Admin access required." },
+        { status: 403 },
+      );
+    }
+
     const types = await db
       .collection<UserTypeDocument>(COLLECTION_NAME)
       .find()
