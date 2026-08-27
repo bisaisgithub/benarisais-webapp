@@ -1,9 +1,13 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import EditUserModal from "@/components/EditUserModal";
 import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import TypesModal from "@/components/TypesModal";
+import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
+import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -37,6 +41,28 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export default async function UsersPage(props: PageProps<"/users">) {
+  const authCheck = getAuthenticatedUserIdFromToken(
+    getAccessTokenFromCookieStore(await cookies()),
+  );
+  if ("error" in authCheck) {
+    redirect("/");
+  }
+
+  let isAuthorizedAdmin = false;
+  try {
+    const client = await getMongoClient();
+    const db = process.env.MONGODB_DB
+      ? client.db(process.env.MONGODB_DB)
+      : client.db();
+    isAuthorizedAdmin = await isAdmin(db, authCheck.userId);
+  } catch (error) {
+    console.error("Failed to verify admin access:", error);
+  }
+
+  if (!isAuthorizedAdmin) {
+    redirect("/");
+  }
+
   const resolvedSearchParams = await props.searchParams;
 
   const pageSize = clamp(

@@ -14,11 +14,10 @@ export interface AuthCheckError {
   status: number;
 }
 
-/** Verifies the access token cookie only — no database access. */
-export function getAuthenticatedUserId(
-  request: NextRequest,
+/** Verifies an access token only — no database access. */
+export function getAuthenticatedUserIdFromToken(
+  token: string | null,
 ): AuthCheckResult | AuthCheckError {
-  const token = getAccessTokenFromRequest(request);
   if (!token) {
     return { error: "Not signed in.", status: 401 };
   }
@@ -35,6 +34,13 @@ export function getAuthenticatedUserId(
   }
 
   return { userId };
+}
+
+/** Verifies the access token cookie only — no database access. */
+export function getAuthenticatedUserId(
+  request: NextRequest,
+): AuthCheckResult | AuthCheckError {
+  return getAuthenticatedUserIdFromToken(getAccessTokenFromRequest(request));
 }
 
 /**

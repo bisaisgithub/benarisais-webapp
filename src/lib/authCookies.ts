@@ -44,8 +44,19 @@ export function clearAuthCookies(response: NextResponse) {
   });
 }
 
+/** Anything shaped like NextRequest['cookies'] or the store `next/headers` cookies() returns. */
+interface CookieStore {
+  get(name: string): { value: string } | undefined;
+}
+
+export function getAccessTokenFromCookieStore(
+  cookieStore: CookieStore,
+): string | null {
+  return cookieStore.get(ACCESS_TOKEN_COOKIE)?.value ?? null;
+}
+
 export function getAccessTokenFromRequest(request: NextRequest): string | null {
-  return request.cookies.get(ACCESS_TOKEN_COOKIE)?.value ?? null;
+  return getAccessTokenFromCookieStore(request.cookies);
 }
 
 export function getRefreshTokenFromRequest(
