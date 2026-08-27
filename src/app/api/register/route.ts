@@ -2,8 +2,9 @@ import {
   isValidPhoneNumber,
   parsePhoneNumberFromString,
 } from "libphonenumber-js";
+import { MongoServerError } from "mongodb";
 import { NextResponse } from "next/server";
-import { getMongoClient } from "@/lib/mongodb";
+import { ensureUserIndexes, getMongoClient } from "@/lib/mongodb";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COLLECTION_NAME = "users";
@@ -65,6 +66,8 @@ export async function POST(request: Request) {
   }
 
   try {
+    await ensureUserIndexes();
+
     const client = await getMongoClient();
     const db = process.env.MONGODB_DB
       ? client.db(process.env.MONGODB_DB)
@@ -110,6 +113,16 @@ export async function POST(request: Request) {
       createdAt: new Date(),
     });
   } catch (error) {
+    if (error instanceof MongoServerError && error.code === 11000) {
+      const duplicateField = error.keyPattern?.contact
+        ? "contact number"
+        : "email";
+      return NextResponse.json(
+        { error: `An account with that ${duplicateField} already exists.` },
+        { status: 409 },
+      );
+    }
+
     console.error("Failed to save registration:", error);
     return NextResponse.json(
       { error: "Something went wrong. Please try again later." },
