@@ -1,9 +1,16 @@
-import { isValidPhoneNumber } from "libphonenumber-js";
+import {
+  isValidPhoneNumber,
+  parsePhoneNumberFromString,
+} from "libphonenumber-js";
 import { NextResponse } from "next/server";
 import { getMongoClient } from "@/lib/mongodb";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COLLECTION_NAME = "users";
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -62,7 +69,40 @@ export async function POST(request: Request) {
     const db = process.env.MONGODB_DB
       ? client.db(process.env.MONGODB_DB)
       : client.db();
-    await db.collection(COLLECTION_NAME).insertOne({
+    const collection = db.collection(COLLECTION_NAME);
+
+    if (trimmedEmail) {
+      const existingEmail = await collection.findOne({
+        email: { $regex: `^${escapeRegExp(trimmedEmail)}$`, $options: "i" },
+      });
+      if (existingEmail) {
+        return NextResponse.json(
+          { error: "An account with that email already exists." },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (trimmedContact) {
+      const contactConditions: Record<string, unknown>[] = [
+        { contact: trimmedContact },
+      ];
+      const parsedPhone = parsePhoneNumberFromString(trimmedContact, "US");
+      if (parsedPhone?.isValid() && parsedPhone.number !== trimmedContact) {
+        contactConditions.push({ contact: parsedPhone.number });
+      }
+      const existingContact = await collection.findOne({
+        $or: contactConditions,
+      });
+      if (existingContact) {
+        return NextResponse.json(
+          { error: "An account with that contact number already exists." },
+          { status: 409 },
+        );
+      }
+    }
+
+    await collection.insertOne({
       name: name.trim(),
       email: trimmedEmail || null,
       contact: trimmedContact || null,
