@@ -1,15 +1,24 @@
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { ObjectId } from "mongodb";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COLLECTION_NAME = "users";
 
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   context: RouteContext<"/api/users/[id]">,
 ) {
+  const authCheck = getAuthenticatedUserId(request);
+  if ("error" in authCheck) {
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
+  }
+
   const { id } = await context.params;
 
   if (!ObjectId.isValid(id)) {
@@ -88,6 +97,14 @@ export async function PUT(
     const db = process.env.MONGODB_DB
       ? client.db(process.env.MONGODB_DB)
       : client.db();
+
+    if (!(await isAdmin(db, authCheck.userId))) {
+      return NextResponse.json(
+        { error: "Admin access required." },
+        { status: 403 },
+      );
+    }
+
     const collection = db.collection(COLLECTION_NAME);
 
     const result = await collection.findOneAndUpdate(
