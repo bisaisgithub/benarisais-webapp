@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import EditUserModal from "@/components/EditUserModal";
 import LocalDate from "@/components/LocalDate";
@@ -13,6 +12,7 @@ import { getMongoClient } from "@/lib/mongodb";
 const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
+const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
 
 interface UserRecord {
   name: string;
@@ -41,28 +41,6 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export default async function UsersPage(props: PageProps<"/users">) {
-  const authCheck = getAuthenticatedUserIdFromToken(
-    getAccessTokenFromCookieStore(await cookies()),
-  );
-  if ("error" in authCheck) {
-    redirect("/");
-  }
-
-  let isAuthorizedAdmin = false;
-  try {
-    const client = await getMongoClient();
-    const db = process.env.MONGODB_DB
-      ? client.db(process.env.MONGODB_DB)
-      : client.db();
-    isAuthorizedAdmin = await isAdmin(db, authCheck.userId);
-  } catch (error) {
-    console.error("Failed to verify admin access:", error);
-  }
-
-  if (!isAuthorizedAdmin) {
-    redirect("/");
-  }
-
   const resolvedSearchParams = await props.searchParams;
 
   const pageSize = clamp(
@@ -84,32 +62,45 @@ export default async function UsersPage(props: PageProps<"/users">) {
   let page = requestedPage;
   let errorMessage: string | null = null;
 
-  try {
-    const client = await getMongoClient();
-    const db = process.env.MONGODB_DB
-      ? client.db(process.env.MONGODB_DB)
-      : client.db();
-    const collection = db.collection<UserRecord>("users");
+  const authCheck = getAuthenticatedUserIdFromToken(
+    getAccessTokenFromCookieStore(await cookies()),
+  );
 
-    total = await collection.countDocuments();
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    page = Math.min(requestedPage, totalPages);
+  if ("error" in authCheck) {
+    errorMessage = ADMIN_ACCESS_REQUIRED_MESSAGE;
+  } else {
+    try {
+      const client = await getMongoClient();
+      const db = process.env.MONGODB_DB
+        ? client.db(process.env.MONGODB_DB)
+        : client.db();
 
-    users = await collection
-      .find()
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .toArray();
+      if (!(await isAdmin(db, authCheck.userId))) {
+        errorMessage = ADMIN_ACCESS_REQUIRED_MESSAGE;
+      } else {
+        const collection = db.collection<UserRecord>("users");
 
-    userTypes = await db
-      .collection<UserTypeRecord>("user-types")
-      .find()
-      .sort({ text: 1 })
-      .toArray();
-  } catch (error) {
-    console.error("Failed to load users:", error);
-    errorMessage = "Could not load users. Please try again later.";
+        total = await collection.countDocuments();
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        page = Math.min(requestedPage, totalPages);
+
+        users = await collection
+          .find()
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * pageSize)
+          .limit(pageSize)
+          .toArray();
+
+        userTypes = await db
+          .collection<UserTypeRecord>("user-types")
+          .find()
+          .sort({ text: 1 })
+          .toArray();
+      }
+    } catch (error) {
+      console.error("Failed to load users:", error);
+      errorMessage = "Could not load users. Please try again later.";
+    }
   }
 
   const availableTypes = userTypes.map((type) => ({
