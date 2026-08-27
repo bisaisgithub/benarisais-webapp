@@ -1,11 +1,18 @@
-import { isValidPhoneNumber } from "libphonenumber-js";
-import { ObjectId } from "mongodb";
+import {
+  isValidPhoneNumber,
+  parsePhoneNumberFromString,
+} from "libphonenumber-js";
+import { MongoServerError, ObjectId } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
-import { getMongoClient } from "@/lib/mongodb";
+import { ensureUserIndexes, getMongoClient } from "@/lib/mongodb";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COLLECTION_NAME = "users";
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 export async function PUT(
   request: NextRequest,
@@ -105,10 +112,46 @@ export async function PUT(
       );
     }
 
+    await ensureUserIndexes();
+
     const collection = db.collection(COLLECTION_NAME);
+    const objectId = new ObjectId(id);
+
+    if (trimmedEmail) {
+      const existingEmail = await collection.findOne({
+        _id: { $ne: objectId },
+        email: { $regex: `^${escapeRegExp(trimmedEmail)}$`, $options: "i" },
+      });
+      if (existingEmail) {
+        return NextResponse.json(
+          { error: "An account with that email already exists." },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (trimmedContact) {
+      const contactConditions: Record<string, unknown>[] = [
+        { contact: trimmedContact },
+      ];
+      const parsedPhone = parsePhoneNumberFromString(trimmedContact, "US");
+      if (parsedPhone?.isValid() && parsedPhone.number !== trimmedContact) {
+        contactConditions.push({ contact: parsedPhone.number });
+      }
+      const existingContact = await collection.findOne({
+        _id: { $ne: objectId },
+        $or: contactConditions,
+      });
+      if (existingContact) {
+        return NextResponse.json(
+          { error: "An account with that contact number already exists." },
+          { status: 409 },
+        );
+      }
+    }
 
     const result = await collection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
+      { _id: objectId },
       {
         $set: {
           name: name.trim(),
@@ -134,6 +177,16 @@ export async function PUT(
       types: (result.types ?? []).map((typeId: ObjectId) => typeId.toString()),
     });
   } catch (error) {
+    if (error instanceof MongoServerError && error.code === 11000) {
+      const duplicateField = error.keyPattern?.contact
+        ? "contact number"
+        : "email";
+      return NextResponse.json(
+        { error: `An account with that ${duplicateField} already exists.` },
+        { status: 409 },
+      );
+    }
+
     console.error("Failed to update user:", error);
     return NextResponse.json(
       { error: "Something went wrong. Please try again later." },
