@@ -3,10 +3,12 @@ import { MongoClient } from "mongodb";
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
   var _userIndexesPromise: Promise<void> | undefined;
+  var _siteIndexesPromise: Promise<void> | undefined;
 }
 
 let clientPromise: Promise<MongoClient> | undefined;
 let userIndexesPromise: Promise<void> | undefined;
+let siteIndexesPromise: Promise<void> | undefined;
 
 export function getMongoClient(): Promise<MongoClient> {
   if (clientPromise) {
@@ -85,4 +87,47 @@ export function ensureUserIndexes(): Promise<void> {
   }
 
   return userIndexesPromise;
+}
+
+/**
+ * Enforces site-name uniqueness at the database level, closing the race a
+ * pre-insert findOne check alone can't. Matching is case-insensitive so
+ * "Main Court" and "main court" collide, which is how the pre-check reads
+ * them too. Runs once per server process; a failure (e.g. pre-existing
+ * duplicate data) is logged rather than thrown, so adding a site still
+ * works off the application-level check alone.
+ */
+export function ensureSiteIndexes(): Promise<void> {
+  if (siteIndexesPromise) {
+    return siteIndexesPromise;
+  }
+
+  async function createIndexes() {
+    try {
+      const client = await getMongoClient();
+      const db = process.env.MONGODB_DB
+        ? client.db(process.env.MONGODB_DB)
+        : client.db();
+
+      await db
+        .collection("sites")
+        .createIndex(
+          { name: 1 },
+          { unique: true, collation: { locale: "en", strength: 2 } },
+        );
+    } catch (error) {
+      console.error("Failed to ensure site indexes:", error);
+    }
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    if (!global._siteIndexesPromise) {
+      global._siteIndexesPromise = createIndexes();
+    }
+    siteIndexesPromise = global._siteIndexesPromise;
+  } else {
+    siteIndexesPromise = createIndexes();
+  }
+
+  return siteIndexesPromise;
 }

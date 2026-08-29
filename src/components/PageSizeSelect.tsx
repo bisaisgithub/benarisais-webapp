@@ -4,7 +4,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
-export default function PageSizeSelect({ pageSize }: { pageSize: number }) {
+export default function PageSizeSelect({
+  pageSize,
+  basePath = "/users",
+}: {
+  pageSize: number;
+  basePath?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -12,7 +18,7 @@ export default function PageSizeSelect({ pageSize }: { pageSize: number }) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("pageSize", event.target.value);
     params.set("page", "1");
-    router.push(`/users?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   const options = PAGE_SIZE_OPTIONS.includes(pageSize)

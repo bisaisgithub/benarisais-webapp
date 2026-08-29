@@ -21,6 +21,12 @@ export default function Navbar() {
             >
               Users
             </Link>
+            <Link
+              href="/sites"
+              className="rounded-full border border-foreground/15 px-4 py-2 text-center text-sm font-medium transition-colors hover:bg-foreground/10 sm:px-5 sm:text-base"
+            >
+              Sites
+            </Link>
             <RegisterModal />
             <LoginModal />
           </MobileMenu>
