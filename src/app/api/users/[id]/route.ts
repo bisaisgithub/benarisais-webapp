@@ -6,9 +6,27 @@ import { MongoServerError, ObjectId } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureUserIndexes, getMongoClient } from "@/lib/mongodb";
+import {
+  diffChanges,
+  pushUpdateHistory,
+  type UpdateHistoryEntry,
+} from "@/lib/updateHistory";
+import { resolveUserTypes } from "@/lib/userTypes";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COLLECTION_NAME = "users";
+
+interface UserDocument {
+  name: string;
+  email: string | null;
+  contact: string | null;
+  message: string;
+  types?: ObjectId[];
+  password?: string;
+  createdAt?: Date;
+  createdBy?: ObjectId | null;
+  updateHistory?: UpdateHistoryEntry[];
+}
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -114,7 +132,7 @@ export async function PUT(
 
     await ensureUserIndexes();
 
-    const collection = db.collection(COLLECTION_NAME);
+    const collection = db.collection<UserDocument>(COLLECTION_NAME);
     const objectId = new ObjectId(id);
 
     if (trimmedEmail) {
@@ -150,6 +168,35 @@ export async function PUT(
       }
     }
 
+    const current = await collection.findOne({ _id: objectId });
+    if (!current) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+
+    // Types are recorded by their text rather than their id, so history stays
+    // readable even after a type is renamed.
+    const [currentTypeTexts, nextTypeTexts] = await Promise.all([
+      resolveUserTypes(db, current.types),
+      resolveUserTypes(db, typeIds),
+    ]);
+
+    const changes = diffChanges(
+      {
+        name: current.name,
+        email: current.email,
+        contact: current.contact,
+        message: current.message,
+        types: currentTypeTexts.map((type) => type.text),
+      },
+      {
+        name: name.trim(),
+        email: trimmedEmail || null,
+        contact: trimmedContact || null,
+        message: message.trim(),
+        types: nextTypeTexts.map((type) => type.text),
+      },
+    );
+
     const result = await collection.findOneAndUpdate(
       { _id: objectId },
       {
@@ -160,6 +207,11 @@ export async function PUT(
           message: message.trim(),
           types: typeIds.map((typeId: string) => new ObjectId(typeId)),
         },
+        // Skipped when nothing moved, so a no-op save can't push real edits
+        // out of the capped history.
+        ...(Object.keys(changes).length > 0
+          ? { $push: pushUpdateHistory(authCheck.userId, changes) }
+          : {}),
       },
       { returnDocument: "after" },
     );

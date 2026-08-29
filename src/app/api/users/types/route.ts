@@ -2,11 +2,23 @@ import { ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
+import {
+  actorIdsOf,
+  actorName,
+  diffChanges,
+  pushUpdateHistory,
+  resolveActorNames,
+  toHistoryView,
+  type UpdateHistoryEntry,
+} from "@/lib/updateHistory";
 
 const COLLECTION_NAME = "user-types";
 
 interface UserTypeDocument {
   text: string;
+  createdAt?: Date;
+  createdBy?: ObjectId | null;
+  updateHistory?: UpdateHistoryEntry[];
 }
 
 function escapeRegExp(value: string) {
@@ -44,10 +56,19 @@ export async function GET(request: NextRequest) {
       .find()
       .sort({ text: 1 })
       .toArray();
+
+    const actorNames = await resolveActorNames(
+      db,
+      types.flatMap((type) => actorIdsOf(type)),
+    );
+
     return NextResponse.json({
       types: types.map((type) => ({
         _id: type._id.toString(),
         text: type.text,
+        createdByName: actorName(type.createdBy, actorNames),
+        createdAt: type.createdAt ? type.createdAt.toISOString() : null,
+        history: toHistoryView(type.updateHistory, actorNames),
       })),
     });
   } catch (error) {
@@ -116,9 +137,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await collection.insertOne({ text: trimmedText });
+    const createdAt = new Date();
+    const result = await collection.insertOne({
+      text: trimmedText,
+      createdAt,
+      createdBy: new ObjectId(authCheck.userId),
+      updateHistory: [],
+    });
+
     return NextResponse.json(
-      { _id: result.insertedId.toString(), text: trimmedText },
+      {
+        _id: result.insertedId.toString(),
+        text: trimmedText,
+        createdByName: actorName(
+          authCheck.userId,
+          await resolveActorNames(db, [authCheck.userId]),
+        ),
+        createdAt: createdAt.toISOString(),
+        history: [],
+      },
       { status: 201 },
     );
   } catch (error) {
@@ -196,16 +233,35 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const result = await collection.updateOne(
-      { _id: objectId },
-      { $set: { text: trimmedText } },
-    );
-
-    if (result.matchedCount === 0) {
+    const current = await collection.findOne({ _id: objectId });
+    if (!current) {
       return NextResponse.json({ error: "Type not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ _id: id, text: trimmedText });
+    const changes = diffChanges({ text: current.text }, { text: trimmedText });
+
+    await collection.updateOne({ _id: objectId }, {
+      $set: { text: trimmedText },
+      // Skipped when nothing moved, so a no-op save can't push real edits
+      // out of the capped history.
+      ...(Object.keys(changes).length > 0
+        ? { $push: pushUpdateHistory(authCheck.userId, changes) }
+        : {}),
+    });
+
+    const updated = await collection.findOne({ _id: objectId });
+    const actorNames = await resolveActorNames(
+      db,
+      updated ? actorIdsOf(updated) : [],
+    );
+
+    return NextResponse.json({
+      _id: id,
+      text: trimmedText,
+      createdByName: actorName(updated?.createdBy, actorNames),
+      createdAt: updated?.createdAt ? updated.createdAt.toISOString() : null,
+      history: toHistoryView(updated?.updateHistory, actorNames),
+    });
   } catch (error) {
     console.error("Failed to update user type:", error);
     return NextResponse.json(

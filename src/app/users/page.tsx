@@ -2,12 +2,20 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import EditUserModal from "@/components/EditUserModal";
+import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import TypesModal from "@/components/TypesModal";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
+import {
+  actorIdsOf,
+  actorName,
+  resolveActorNames,
+  toHistoryView,
+  type UpdateHistoryEntry,
+} from "@/lib/updateHistory";
 
 const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
@@ -21,6 +29,8 @@ interface UserRecord {
   message: string;
   createdAt: Date;
   types?: unknown[];
+  createdBy?: unknown;
+  updateHistory?: UpdateHistoryEntry[];
 }
 
 interface UserTypeRecord {
@@ -58,6 +68,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
 
   let users: (UserRecord & { _id: unknown })[] = [];
   let userTypes: (UserTypeRecord & { _id: unknown })[] = [];
+  let actorNames = new Map<string, string>();
   let total = 0;
   let page = requestedPage;
   let errorMessage: string | null = null;
@@ -96,6 +107,11 @@ export default async function UsersPage(props: PageProps<"/users">) {
           .find()
           .sort({ text: 1 })
           .toArray();
+
+        actorNames = await resolveActorNames(
+          db,
+          users.flatMap((user) => actorIdsOf(user)),
+        );
       }
     } catch (error) {
       console.error("Failed to load users:", error);
@@ -196,15 +212,30 @@ export default async function UsersPage(props: PageProps<"/users">) {
                           <LocalDate value={user.createdAt.toISOString()} />
                         </td>
                         <td className="px-4 py-3">
-                          <EditUserModal
-                            id={id}
-                            name={user.name}
-                            email={user.email}
-                            contact={user.contact}
-                            message={user.message}
-                            typeIds={typeIds}
-                            availableTypes={availableTypes}
-                          />
+                          <div className="flex items-center gap-2">
+                            <EditUserModal
+                              id={id}
+                              name={user.name}
+                              email={user.email}
+                              contact={user.contact}
+                              message={user.message}
+                              typeIds={typeIds}
+                              availableTypes={availableTypes}
+                            />
+                            <HistoryModal
+                              title={user.name}
+                              createdByName={actorName(
+                                user.createdBy,
+                                actorNames,
+                                "Self-registered",
+                              )}
+                              createdAt={user.createdAt.toISOString()}
+                              history={toHistoryView(
+                                user.updateHistory,
+                                actorNames,
+                              )}
+                            />
+                          </div>
                         </td>
                       </tr>
                     );

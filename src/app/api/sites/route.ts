@@ -1,13 +1,16 @@
-import { MongoServerError, type Db } from "mongodb";
+import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureSiteIndexes, getMongoClient } from "@/lib/mongodb";
+import type { UpdateHistoryEntry } from "@/lib/updateHistory";
 
 const COLLECTION_NAME = "sites";
 
 interface SiteDocument {
   name: string;
   createdAt: Date;
+  createdBy: ObjectId | null;
+  updateHistory: UpdateHistoryEntry[];
 }
 
 function escapeRegExp(value: string) {
@@ -123,6 +126,8 @@ export async function POST(request: NextRequest) {
     const result = await collection.insertOne({
       name: trimmedName,
       createdAt: new Date(),
+      createdBy: new ObjectId(authCheck.userId),
+      updateHistory: [],
     });
 
     return NextResponse.json(

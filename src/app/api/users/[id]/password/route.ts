@@ -3,8 +3,17 @@ import { ObjectId } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
+import {
+  pushUpdateHistory,
+  type UpdateHistoryEntry,
+} from "@/lib/updateHistory";
 
 const COLLECTION_NAME = "users";
+
+interface UserDocument {
+  password?: string;
+  updateHistory?: UpdateHistoryEntry[];
+}
 const MIN_PASSWORD_LENGTH = 8;
 const SALT_ROUNDS = 10;
 
@@ -69,12 +78,15 @@ export async function PUT(
       );
     }
 
-    const result = await db
-      .collection(COLLECTION_NAME)
-      .updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { password: passwordHash } },
-      );
+    const result = await db.collection<UserDocument>(COLLECTION_NAME).updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: { password: passwordHash },
+        // Recorded as a reset rather than a value — the hash must not end up
+        // in a history anyone can open.
+        $push: pushUpdateHistory(authCheck.userId, { password: "(reset)" }),
+      },
+    );
 
     if (result.matchedCount === 0) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });

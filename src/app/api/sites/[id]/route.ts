@@ -2,12 +2,19 @@ import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureSiteIndexes, getMongoClient } from "@/lib/mongodb";
+import {
+  diffChanges,
+  pushUpdateHistory,
+  type UpdateHistoryEntry,
+} from "@/lib/updateHistory";
 
 const COLLECTION_NAME = "sites";
 
 interface SiteDocument {
   name: string;
   createdAt: Date;
+  createdBy: ObjectId | null;
+  updateHistory: UpdateHistoryEntry[];
 }
 
 function escapeRegExp(value: string) {
@@ -92,10 +99,24 @@ export async function PUT(
       );
     }
 
-    const result = await collection.updateOne(
-      { _id: objectId },
-      { $set: { name: trimmedName } },
+    const current = await collection.findOne({ _id: objectId });
+    if (!current) {
+      return NextResponse.json({ error: "Site not found." }, { status: 404 });
+    }
+
+    const changes = diffChanges(
+      { name: current.name },
+      { name: trimmedName },
     );
+
+    const result = await collection.updateOne({ _id: objectId }, {
+      $set: { name: trimmedName },
+      // Skipped when nothing moved, so a no-op save can't push real edits
+      // out of the capped history.
+      ...(Object.keys(changes).length > 0
+        ? { $push: pushUpdateHistory(authCheck.userId, changes) }
+        : {}),
+    });
 
     if (result.matchedCount === 0) {
       return NextResponse.json({ error: "Site not found." }, { status: 404 });

@@ -2,10 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import HistoryModal from "@/components/HistoryModal";
+import type { UpdateHistoryView } from "@/lib/updateHistory";
 
 interface UserType {
   _id: string;
   text: string;
+  createdByName: string;
+  createdAt: string | null;
+  history: UpdateHistoryView[];
 }
 
 export default function TypesModal() {
@@ -283,6 +288,12 @@ export default function TypesModal() {
                               >
                                 Rename
                               </button>
+                              <HistoryModal
+                                title={type.text}
+                                createdByName={type.createdByName}
+                                createdAt={type.createdAt}
+                                history={type.history}
+                              />
                             </>
                           )}
                         </li>

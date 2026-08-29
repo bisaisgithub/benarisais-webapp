@@ -111,6 +111,10 @@ export async function POST(request: Request) {
       contact: trimmedContact || null,
       message: message.trim(),
       createdAt: new Date(),
+      // Registration is public and unauthenticated, so there is no actor to
+      // credit — null reads as self-registered wherever history is shown.
+      createdBy: null,
+      updateHistory: [],
     });
   } catch (error) {
     if (error instanceof MongoServerError && error.code === 11000) {

@@ -3,11 +3,19 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import AddSiteModal from "@/components/AddSiteModal";
 import EditSiteModal from "@/components/EditSiteModal";
+import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
+import {
+  actorIdsOf,
+  actorName,
+  resolveActorNames,
+  toHistoryView,
+  type UpdateHistoryEntry,
+} from "@/lib/updateHistory";
 
 const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
@@ -17,6 +25,8 @@ const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
 interface SiteRecord {
   name: string;
   createdAt?: Date;
+  createdBy?: unknown;
+  updateHistory?: UpdateHistoryEntry[];
 }
 
 function firstValue(value: string | string[] | undefined) {
@@ -49,6 +59,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
   );
 
   let sites: (SiteRecord & { _id: unknown })[] = [];
+  let actorNames = new Map<string, string>();
   let total = 0;
   let page = requestedPage;
   let errorMessage: string | null = null;
@@ -81,6 +92,11 @@ export default async function SitesPage(props: PageProps<"/sites">) {
           .skip((page - 1) * pageSize)
           .limit(pageSize)
           .toArray();
+
+        actorNames = await resolveActorNames(
+          db,
+          sites.flatMap((site) => actorIdsOf(site)),
+        );
       }
     } catch (error) {
       console.error("Failed to load sites:", error);
@@ -145,7 +161,25 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <EditSiteModal id={id} name={site.name} />
+                              <div className="flex items-center gap-2">
+                                <EditSiteModal id={id} name={site.name} />
+                                <HistoryModal
+                                  title={site.name}
+                                  createdByName={actorName(
+                                    site.createdBy,
+                                    actorNames,
+                                  )}
+                                  createdAt={
+                                    site.createdAt
+                                      ? site.createdAt.toISOString()
+                                      : null
+                                  }
+                                  history={toHistoryView(
+                                    site.updateHistory,
+                                    actorNames,
+                                  )}
+                                />
+                              </div>
                             </td>
                           </tr>
                         );
