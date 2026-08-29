@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import AddSiteForm from "@/components/AddSiteForm";
+import AddSiteModal from "@/components/AddSiteModal";
 import EditSiteModal from "@/components/EditSiteModal";
 import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
@@ -103,6 +103,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {!errorMessage && <AddSiteModal />}
             <PageSizeSelect pageSize={pageSize} basePath="/sites" />
           </div>
         </div>
@@ -111,8 +112,6 @@ export default async function SitesPage(props: PageProps<"/sites">) {
           <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
         ) : (
           <>
-            <AddSiteForm />
-
             {sites.length === 0 ? (
               <p className="mt-8 text-sm text-foreground/60">No sites yet.</p>
             ) : (
