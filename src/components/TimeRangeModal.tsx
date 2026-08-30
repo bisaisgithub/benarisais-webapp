@@ -8,9 +8,11 @@ import {
   durationMinutes,
   formatDuration,
   formatInterval,
+  formatTime,
   intervalToMinutes,
   INTERVAL_OPTIONS,
   parseTime,
+  snapToStep,
   stepMinutesFor,
   validateTimeRange,
 } from "@/lib/timeRanges";
@@ -50,17 +52,56 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
   const startMinutes = parseTime(start);
   const endMinutes = parseTime(end);
 
+  const stepMinutes = stepMinutesFor(numericInterval);
   // The step drives the picker; the same rule is enforced on the server.
-  const step = stepMinutesFor(numericInterval) * 60;
+  const step = stepMinutes * 60;
+
+  /**
+   * A time input keeps whatever is typed regardless of its step, so pull the
+   * value onto the grid once the field is done being edited.
+   */
+  function snapField(
+    value: string,
+    setValue: (next: string) => void,
+    gridMinutes = stepMinutes,
+  ) {
+    const minutes = parseTime(value);
+    if (minutes === null || minutes % gridMinutes === 0) {
+      return;
+    }
+    setValue(formatTime(snapToStep(minutes, gridMinutes)));
+  }
+
+  function handleIntervalChange(next: string) {
+    setInterval(next);
+    setSubmitError(null);
+
+    // Switching to a coarser grid can strand times that were fine before.
+    const nextGrid = stepMinutesFor(Number(next));
+    snapField(start, setStart, nextGrid);
+    snapField(end, setEnd, nextGrid);
+  }
+
+  // Flagged per field, so an off-grid time is called out before the other
+  // field is filled in.
+  const offGrid = [startMinutes, endMinutes].some(
+    (minutes) => minutes !== null && minutes % stepMinutes !== 0,
+  );
+  const alignmentError = offGrid
+    ? stepMinutes === 30
+      ? "With a 30 minute interval, times must be on the hour or half hour."
+      : "With a whole hour interval, times must be on the hour."
+    : null;
 
   const validationError =
-    startMinutes === null || endMinutes === null
+    alignmentError ??
+    (startMinutes === null || endMinutes === null
       ? null
       : validateTimeRange({
           interval: numericInterval,
           startMinutes,
           endMinutes,
-        });
+        }));
 
   const span =
     startMinutes !== null && endMinutes !== null && !validationError
@@ -183,10 +224,9 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
                     <select
                       id="time-range-interval"
                       value={interval}
-                      onChange={(event) => {
-                        setInterval(event.target.value);
-                        setSubmitError(null);
-                      }}
+                      onChange={(event) =>
+                        handleIntervalChange(event.target.value)
+                      }
                       className="mt-1 w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-accent"
                     >
                       {INTERVAL_OPTIONS.map((option) => (
@@ -214,6 +254,9 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
                           setStart(event.target.value);
                           setSubmitError(null);
                         }}
+                        onBlur={(event) =>
+                          snapField(event.target.value, setStart)
+                        }
                         className="mt-1 w-full rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
                       />
                     </div>
@@ -233,6 +276,9 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
                           setEnd(event.target.value);
                           setSubmitError(null);
                         }}
+                        onBlur={(event) =>
+                          snapField(event.target.value, setEnd)
+                        }
                         className="mt-1 w-full rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
                       />
                     </div>

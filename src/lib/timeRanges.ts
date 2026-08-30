@@ -37,6 +37,17 @@ export function stepMinutesFor(interval: number): number {
   return interval === HALF_HOUR_INTERVAL ? 30 : 60;
 }
 
+/**
+ * Rounds a time onto the interval's grid, to the nearest step. A time input's
+ * `step` only drives its spinner — a typed 12:02 is kept, and Chromium even
+ * reports it as valid — so the value is snapped rather than left off-grid.
+ * Rounding past the end of the day wraps to 00:00, which these cyclic ranges
+ * treat as the neighbour of 23:59 anyway.
+ */
+export function snapToStep(totalMinutes: number, step: number): number {
+  return (Math.round(totalMinutes / step) * step) % MINUTES_PER_DAY;
+}
+
 /** "23:30" -> 1410. Returns null for anything that isn't a HH:MM in range. */
 export function parseTime(value: unknown): number | null {
   if (typeof value !== "string") {
