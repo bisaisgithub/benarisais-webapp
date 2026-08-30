@@ -5,12 +5,14 @@ declare global {
   var _userIndexesPromise: Promise<void> | undefined;
   var _siteIndexesPromise: Promise<void> | undefined;
   var _courtIndexesPromise: Promise<void> | undefined;
+  var _timeRangeIndexesPromise: Promise<void> | undefined;
 }
 
 let clientPromise: Promise<MongoClient> | undefined;
 let userIndexesPromise: Promise<void> | undefined;
 let siteIndexesPromise: Promise<void> | undefined;
 let courtIndexesPromise: Promise<void> | undefined;
+let timeRangeIndexesPromise: Promise<void> | undefined;
 
 export function getMongoClient(): Promise<MongoClient> {
   if (clientPromise) {
@@ -172,4 +174,42 @@ export function ensureCourtIndexes(): Promise<void> {
   }
 
   return courtIndexesPromise;
+}
+
+/**
+ * One range per start/end pair. The interval is deliberately not part of the
+ * key: two ranges over the same hours are duplicates whatever their interval.
+ * Runs once per server process; a failure (e.g. pre-existing duplicate data)
+ * is logged rather than thrown.
+ */
+export function ensureTimeRangeIndexes(): Promise<void> {
+  if (timeRangeIndexesPromise) {
+    return timeRangeIndexesPromise;
+  }
+
+  async function createIndexes() {
+    try {
+      const client = await getMongoClient();
+      const db = process.env.MONGODB_DB
+        ? client.db(process.env.MONGODB_DB)
+        : client.db();
+
+      await db
+        .collection("time-ranges")
+        .createIndex({ startMinutes: 1, endMinutes: 1 }, { unique: true });
+    } catch (error) {
+      console.error("Failed to ensure time range indexes:", error);
+    }
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    if (!global._timeRangeIndexesPromise) {
+      global._timeRangeIndexesPromise = createIndexes();
+    }
+    timeRangeIndexesPromise = global._timeRangeIndexesPromise;
+  } else {
+    timeRangeIndexesPromise = createIndexes();
+  }
+
+  return timeRangeIndexesPromise;
 }
