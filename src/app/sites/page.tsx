@@ -105,6 +105,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const firstRowNumber = (page - 1) * pageSize + 1;
 
   return (
     <main className="flex-1">
@@ -133,16 +134,17 @@ export default async function SitesPage(props: PageProps<"/sites">) {
             ) : (
               <>
                 <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
-                  <table className="w-full min-w-[480px] text-left text-sm">
+                  <table className="w-full min-w-[520px] text-left text-sm">
                     <thead className="border-b border-foreground/10 bg-foreground/5">
                       <tr>
+                        <th className="px-4 py-3 font-medium">No.</th>
                         <th className="px-4 py-3 font-medium">Name</th>
                         <th className="px-4 py-3 font-medium">Added</th>
                         <th className="px-4 py-3 font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {sites.map((site) => {
+                      {sites.map((site, index) => {
                         const id = String(site._id);
 
                         return (
@@ -150,6 +152,9 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                             key={id}
                             className="border-b border-foreground/10 last:border-0"
                           >
+                            <td className="px-4 py-3 text-foreground/60">
+                              {firstRowNumber + index}
+                            </td>
                             <td className="px-4 py-3">{site.name}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-foreground/60">
                               {site.createdAt ? (

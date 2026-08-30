@@ -128,6 +128,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
   );
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const firstRowNumber = (page - 1) * pageSize + 1;
 
   return (
     <main className="flex-1">
@@ -156,9 +157,10 @@ export default async function UsersPage(props: PageProps<"/users">) {
         ) : (
           <>
             <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <table className="w-full min-w-[700px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
+                    <th className="px-4 py-3 font-medium">No.</th>
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">Contact</th>
@@ -169,7 +171,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => {
+                  {users.map((user, index) => {
                     const id = String(user._id);
                     const typeIds = (user.types ?? []).map((typeId) =>
                       String(typeId),
@@ -183,6 +185,9 @@ export default async function UsersPage(props: PageProps<"/users">) {
                         key={id}
                         className="border-b border-foreground/10 last:border-0"
                       >
+                        <td className="px-4 py-3 text-foreground/60">
+                          {firstRowNumber + index}
+                        </td>
                         <td className="px-4 py-3">{user.name}</td>
                         <td className="px-4 py-3">{user.email ?? "—"}</td>
                         <td className="px-4 py-3">{user.contact ?? "—"}</td>
