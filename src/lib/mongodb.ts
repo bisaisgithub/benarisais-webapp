@@ -4,11 +4,13 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
   var _userIndexesPromise: Promise<void> | undefined;
   var _siteIndexesPromise: Promise<void> | undefined;
+  var _courtIndexesPromise: Promise<void> | undefined;
 }
 
 let clientPromise: Promise<MongoClient> | undefined;
 let userIndexesPromise: Promise<void> | undefined;
 let siteIndexesPromise: Promise<void> | undefined;
+let courtIndexesPromise: Promise<void> | undefined;
 
 export function getMongoClient(): Promise<MongoClient> {
   if (clientPromise) {
@@ -130,4 +132,44 @@ export function ensureSiteIndexes(): Promise<void> {
   }
 
   return siteIndexesPromise;
+}
+
+/**
+ * Enforces one court number per site: the compound key is unique, so the
+ * same number can exist at different sites but never twice at one. This is
+ * what makes concurrent adds safe — both requests read the same last number,
+ * and the second insert fails on the index rather than duplicating a court.
+ * Runs once per server process; a failure (e.g. pre-existing duplicate data)
+ * is logged rather than thrown.
+ */
+export function ensureCourtIndexes(): Promise<void> {
+  if (courtIndexesPromise) {
+    return courtIndexesPromise;
+  }
+
+  async function createIndexes() {
+    try {
+      const client = await getMongoClient();
+      const db = process.env.MONGODB_DB
+        ? client.db(process.env.MONGODB_DB)
+        : client.db();
+
+      await db
+        .collection("courts")
+        .createIndex({ siteId: 1, number: 1 }, { unique: true });
+    } catch (error) {
+      console.error("Failed to ensure court indexes:", error);
+    }
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    if (!global._courtIndexesPromise) {
+      global._courtIndexesPromise = createIndexes();
+    }
+    courtIndexesPromise = global._courtIndexesPromise;
+  } else {
+    courtIndexesPromise = createIndexes();
+  }
+
+  return courtIndexesPromise;
 }
