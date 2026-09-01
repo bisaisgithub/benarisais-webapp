@@ -6,7 +6,7 @@ import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
 import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
-import TableFilters from "@/components/TableFilters";
+import ColumnFilter from "@/components/ColumnFilter";
 import TableSearch from "@/components/TableSearch";
 import TypesModal from "@/components/TypesModal";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
@@ -28,6 +28,15 @@ const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
 const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
+
+/** Filterable columns, in table order. The key is also the URL parameter. */
+const USER_FILTER_COLUMNS = [
+  { heading: "Name", column: { key: "name", label: "name", placeholder: "Search name…" } },
+  { heading: "Email", column: { key: "email", label: "email", placeholder: "Search email…" } },
+  { heading: "Contact", column: { key: "contact", label: "contact", placeholder: "Search contact…" } },
+  { heading: "Message", column: { key: "message", label: "message", placeholder: "Search message…" } },
+  { heading: "Types", column: { key: "type", label: "type", placeholder: "Search type…" } },
+] as const;
 
 interface UserRecord {
   name: string;
@@ -229,25 +238,18 @@ export default async function UsersPage(props: PageProps<"/users">) {
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
                     <th className="px-4 py-3 font-medium">No.</th>
-                    <th className="px-4 py-3 font-medium">Name</th>
-                    <th className="px-4 py-3 font-medium">Email</th>
-                    <th className="px-4 py-3 font-medium">Contact</th>
-                    <th className="px-4 py-3 font-medium">Message</th>
-                    <th className="px-4 py-3 font-medium">Types</th>
+                    {USER_FILTER_COLUMNS.map(({ heading, column }) => (
+                      <th
+                        key={heading}
+                        className="whitespace-nowrap px-4 py-3 font-medium"
+                      >
+                        {heading}
+                        <ColumnFilter column={column} />
+                      </th>
+                    ))}
                     <th className="px-4 py-3 font-medium">Registered</th>
                     <th className="px-4 py-3 font-medium">Actions</th>
                   </tr>
-                  <TableFilters
-                    columns={[
-                      { key: "name", label: "name", placeholder: "Search name…" },
-                      { key: "email", label: "email", placeholder: "Search email…" },
-                      { key: "contact", label: "contact", placeholder: "Search contact…" },
-                      { key: "message", label: "message", placeholder: "Search message…" },
-                      { key: "type", label: "type", placeholder: "Search type…" },
-                      null,
-                      null,
-                    ]}
-                  />
                 </thead>
                 <tbody>
                   {users.length === 0 && (
