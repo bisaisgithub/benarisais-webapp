@@ -7,7 +7,8 @@ import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
 import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
-import TableFilters from "@/components/TableFilters";
+import TableSearch from "@/components/TableSearch";
+import ColumnFilter from "@/components/ColumnFilter";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
 import { filterValue, textCondition } from "@/lib/listFilters";
@@ -24,6 +25,11 @@ const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
 const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
+
+/** Filterable columns, in table order. The key is also the URL parameter. */
+const SITE_FILTER_COLUMNS = [
+  { heading: "Name", column: { key: "name", label: "name", placeholder: "Search name…" } },
+] as const;
 
 interface SiteRecord {
   name: string;
@@ -61,8 +67,9 @@ export default async function SitesPage(props: PageProps<"/sites">) {
     1,
   );
 
+  const search = filterValue(resolvedSearchParams.q);
   const nameFilter = filterValue(resolvedSearchParams.name);
-  const hasFilters = Boolean(nameFilter);
+  const hasFilters = Boolean(search || nameFilter);
 
   let sites: (SiteRecord & { _id: unknown })[] = [];
   let actorNames = new Map<string, string>();
@@ -91,6 +98,11 @@ export default async function SitesPage(props: PageProps<"/sites">) {
         const filter: Record<string, unknown> = {};
         if (nameFilter) {
           filter.name = textCondition(nameFilter);
+        }
+        if (search) {
+          // Name is the only field a site carries, so searching all fields
+          // and filtering the column agree — they still combine as an AND.
+          filter.$or = [{ name: textCondition(search) }];
         }
 
         // Counted with the filter applied, so the page count and the page
@@ -125,6 +137,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
       page: String(targetPage),
       pageSize: String(pageSize),
     });
+    if (search) params.set("q", search);
     if (nameFilter) params.set("name", nameFilter);
     return `/sites?${params.toString()}`;
   }
@@ -152,27 +165,30 @@ export default async function SitesPage(props: PageProps<"/sites">) {
           <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
         ) : (
           <>
-            <ListFilters basePath="/sites" initial={{ name: nameFilter }}>
+            <ListFilters basePath="/sites" initial={{ q: search, name: nameFilter }}>
             {sites.length === 0 && !hasFilters ? (
               <p className="mt-8 text-sm text-foreground/60">No sites yet.</p>
             ) : (
               <>
-                <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
+                <TableSearch />
+
+                <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
                   <table className="w-full min-w-[520px] text-left text-sm">
                     <thead className="border-b border-foreground/10 bg-foreground/5">
                       <tr>
                         <th className="px-4 py-3 font-medium">No.</th>
-                        <th className="px-4 py-3 font-medium">Name</th>
+                        {SITE_FILTER_COLUMNS.map(({ heading, column }) => (
+                          <th
+                            key={heading}
+                            className="whitespace-nowrap px-4 py-3 font-medium"
+                          >
+                            {heading}
+                            <ColumnFilter column={column} />
+                          </th>
+                        ))}
                         <th className="px-4 py-3 font-medium">Added</th>
                         <th className="px-4 py-3 font-medium">Actions</th>
                       </tr>
-                      <TableFilters
-                        columns={[
-                          { key: "name", label: "name", placeholder: "Search name…" },
-                          null,
-                          null,
-                        ]}
-                      />
                     </thead>
                     <tbody>
                       {sites.length === 0 && (

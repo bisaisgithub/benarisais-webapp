@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useListFilters } from "@/components/ListFilters";
-import type { FilterField } from "@/components/TableFilters";
+
+export interface FilterField {
+  /** URL parameter, and the key the page reads it back under. */
+  key: string;
+  /** Names the input for screen readers, e.g. "site". */
+  label: string;
+  placeholder: string;
+}
 
 /**
  * A funnel beside a column heading that opens that column's filter input.

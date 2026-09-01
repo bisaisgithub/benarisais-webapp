@@ -1,6 +1,6 @@
 ---
 name: list-page
-description: Build or change an admin list page in this app — a paginated table with per-column filters, an Add modal, per-row Edit, and edit history — following the Sites page as the reference implementation. Use this whenever the work touches /sites, /users, /courts, /time-ranges or a new page like them, and also whenever someone asks for a new admin screen, a CRUD page, a "list of X" with add/edit, a managed collection, or says "same as the sites page" / "follow the site page pattern". Use it even when they describe the feature only in domain terms ("a page to manage bookings", "let admins add coaches") without naming the pattern, since the conventions here — backend-only authorization, createdAt/createdBy/updateHistory, unique indexes, No.-first columns, filtering in the query rather than the browser — are easy to miss and expensive to retrofit.
+description: Build or change an admin list page in this app — a paginated table with a search-all-fields box, per-column filters, an Add modal, per-row Edit, and edit history — following the Sites page as the reference implementation. Use this whenever the work touches /sites, /users, /courts, /time-ranges or a new page like them, and also whenever someone asks for a new admin screen, a CRUD page, a "list of X" with add/edit, a managed collection, or says "same as the sites page" / "follow the site page pattern". Use it even when they describe the feature only in domain terms ("a page to manage bookings", "let admins add coaches") without naming the pattern, since the conventions here — backend-only authorization, createdAt/createdBy/updateHistory, unique indexes, No.-first columns, filtering in the query rather than the browser — are easy to miss and expensive to retrofit.
 ---
 
 # Admin list page
@@ -30,10 +30,11 @@ a row unique, and which columns the table shows. Getting this wrong is what
 forces rework later, so if the request is ambiguous on any of them — and
 especially on uniqueness — ask rather than guess.
 
-**3. Reuse what is shared.** `HistoryModal`, `PageSizeSelect`, `TableFilters`,
-`LocalDate` and everything in `src/lib/updateHistory.ts` and
-`src/lib/listFilters.ts` are shared across all four pages. Never fork them.
-Only the page, the two endpoints and the entity's own modals are new.
+**3. Reuse what is shared.** `HistoryModal`, `PageSizeSelect`, `ListFilters`,
+`ColumnFilter`, `TableSearch`, `LocalDate` and everything in
+`src/lib/updateHistory.ts` and `src/lib/listFilters.ts` are shared across all
+four pages. Never fork them. Only the page, the two endpoints and the entity's
+own modals are new.
 
 **4. Build in this order**, checking each step compiles before the next:
 index helper in `src/lib/mongodb.ts` → API routes → modals → page → navbar
@@ -59,10 +60,14 @@ changed, so a no-op save cannot flush ten real edits out of the window.
 the unique index behind it is what actually closes the race. Handle
 `MongoServerError` code `11000` too.
 
-**Filters belong in the query, not the browser.** They feed the same count and
-find that drive pagination, so the row count and page count describe the
-filtered result. Count before clamping the page, and make the pagination links
-carry the filters.
+**Filters belong in the query, not the browser.** The search box and every
+column filter feed the same count and find that drive pagination, so the row
+count and page count describe the filtered result. Count before clamping the
+page, and make the pagination links carry the search and every filter.
+
+**Filter state has one owner.** `ListFilters` holds every value on the page and
+makes a single URL update. A component that pushes its own copy of the query
+string will race the others and silently revert their values.
 
 ## Verifying
 

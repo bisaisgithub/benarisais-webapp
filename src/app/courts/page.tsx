@@ -2,9 +2,10 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import AddCourtsModal from "@/components/AddCourtsModal";
-import TableFilters from "@/components/TableFilters";
+import ColumnFilter from "@/components/ColumnFilter";
 import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
+import TableSearch from "@/components/TableSearch";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
 import {
@@ -18,6 +19,12 @@ const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
 const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
+
+/** Filterable columns, in table order. The key is also the URL parameter. */
+const COURT_FILTER_COLUMNS = [
+  { heading: "Site", column: { key: "site", label: "site", placeholder: "Search site…" } },
+  { heading: "Court No.", column: { key: "number", label: "court number", placeholder: "Court no…" } },
+] as const;
 
 interface CourtRow {
   _id: unknown;
@@ -57,9 +64,10 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
     1,
   );
 
+  const search = filterValue(resolvedSearchParams.q);
   const siteFilter = filterValue(resolvedSearchParams.site);
   const numberFilter = filterValue(resolvedSearchParams.number);
-  const hasFilters = Boolean(siteFilter || numberFilter);
+  const hasFilters = Boolean(search || siteFilter || numberFilter);
 
   let courts: CourtRow[] = [];
   let total = 0;
@@ -90,6 +98,14 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
         }
         if (numberFilter) {
           match.number = numberCondition(numberFilter);
+        }
+        if (search) {
+          // One term against both columns. A non-numeric term simply fails
+          // the number branch rather than excluding the whole search.
+          match.$or = [
+            { "site.name": textCondition(search) },
+            { number: numberCondition(search) },
+          ];
         }
 
         // Joined to sites so the list can be ordered and filtered by site
@@ -154,6 +170,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
       page: String(targetPage),
       pageSize: String(pageSize),
     });
+    if (search) params.set("q", search);
     if (siteFilter) params.set("site", siteFilter);
     if (numberFilter) params.set("number", numberFilter);
     return `/courts?${params.toString()}`;
@@ -184,21 +201,24 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
           <p className="mt-8 text-sm text-foreground/60">No courts yet.</p>
         ) : (
           <>
-            <ListFilters basePath="/courts" initial={{ site: siteFilter, number: numberFilter }}>
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
+            <ListFilters basePath="/courts" initial={{ q: search, site: siteFilter, number: numberFilter }}>
+            <TableSearch />
+
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
               <table className="w-full min-w-[480px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
                     <th className="px-4 py-3 font-medium">No.</th>
-                    <th className="px-4 py-3 font-medium">Site</th>
-                    <th className="px-4 py-3 font-medium">Court No.</th>
+                    {COURT_FILTER_COLUMNS.map(({ heading, column }) => (
+                      <th
+                        key={heading}
+                        className="whitespace-nowrap px-4 py-3 font-medium"
+                      >
+                        {heading}
+                        <ColumnFilter column={column} />
+                      </th>
+                    ))}
                   </tr>
-                  <TableFilters
-                    columns={[
-                      { key: "site", label: "site", placeholder: "Search site…" },
-                      { key: "number", label: "court number", placeholder: "Court no…" },
-                    ]}
-                  />
                 </thead>
                 <tbody>
                   {courts.length === 0 && (

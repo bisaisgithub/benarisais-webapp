@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import HistoryModal from "@/components/HistoryModal";
 import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
-import TableFilters from "@/components/TableFilters";
+import TableSearch from "@/components/TableSearch";
+import ColumnFilter from "@/components/ColumnFilter";
 import TimeRangeModal from "@/components/TimeRangeModal";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
@@ -33,6 +34,13 @@ const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
 const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
+
+/** Filterable columns, in table order. The key is also the URL parameter. */
+const TIME_RANGE_FILTER_COLUMNS = [
+  { heading: "Interval", column: { key: "interval", label: "interval", placeholder: "e.g. 0.5" } },
+  { heading: "Start", column: { key: "start", label: "start time", placeholder: "e.g. 09:00" } },
+  { heading: "End", column: { key: "end", label: "end time", placeholder: "e.g. 17:00" } },
+] as const;
 
 interface TimeRangeRecord {
   interval: number;
@@ -74,12 +82,13 @@ export default async function TimeRangesPage(
     1,
   );
 
+  const search = filterValue(resolvedSearchParams.q);
   const filters = {
     interval: filterValue(resolvedSearchParams.interval),
     start: filterValue(resolvedSearchParams.start),
     end: filterValue(resolvedSearchParams.end),
   };
-  const hasFilters = Object.values(filters).some(Boolean);
+  const hasFilters = Boolean(search) || Object.values(filters).some(Boolean);
 
   let ranges: (TimeRangeRecord & { _id: unknown })[] = [];
   let actorNames = new Map<string, string>();
@@ -117,6 +126,16 @@ export default async function TimeRangesPage(
         if (filters.end) {
           filter.endMinutes = timeCondition(filters.end);
         }
+        if (search) {
+          // One term against all three. Each branch that cannot read the
+          // term matches nothing, so "09:30" finds times and "0.5" finds
+          // intervals without either excluding the other.
+          filter.$or = [
+            { interval: numberCondition(search) },
+            { startMinutes: timeCondition(search) },
+            { endMinutes: timeCondition(search) },
+          ];
+        }
 
         // Counted with the filter applied, so the page count and the page
         // clamp below both describe the filtered result.
@@ -150,6 +169,7 @@ export default async function TimeRangesPage(
       page: String(targetPage),
       pageSize: String(pageSize),
     });
+    if (search) params.set("q", search);
     for (const [key, value] of Object.entries(filters)) {
       if (value) params.set(key, value);
     }
@@ -181,27 +201,26 @@ export default async function TimeRangesPage(
           <p className="mt-8 text-sm text-foreground/60">No time ranges yet.</p>
         ) : (
           <>
-            <ListFilters basePath="/time-ranges" initial={filters}>
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
+            <ListFilters basePath="/time-ranges" initial={{ q: search, ...filters }}>
+            <TableSearch />
+
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
               <table className="w-full min-w-[560px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
                     <th className="px-4 py-3 font-medium">No.</th>
-                    <th className="px-4 py-3 font-medium">Interval</th>
-                    <th className="px-4 py-3 font-medium">Start</th>
-                    <th className="px-4 py-3 font-medium">End</th>
+                    {TIME_RANGE_FILTER_COLUMNS.map(({ heading, column }) => (
+                      <th
+                        key={heading}
+                        className="whitespace-nowrap px-4 py-3 font-medium"
+                      >
+                        {heading}
+                        <ColumnFilter column={column} />
+                      </th>
+                    ))}
                     <th className="px-4 py-3 font-medium">Duration</th>
                     <th className="px-4 py-3 font-medium">Actions</th>
                   </tr>
-                  <TableFilters
-                    columns={[
-                      { key: "interval", label: "interval", placeholder: "e.g. 0.5" },
-                      { key: "start", label: "start time", placeholder: "e.g. 09:00" },
-                      { key: "end", label: "end time", placeholder: "e.g. 17:00" },
-                      null,
-                      null,
-                    ]}
-                  />
                 </thead>
                 <tbody>
                   {ranges.length === 0 && (

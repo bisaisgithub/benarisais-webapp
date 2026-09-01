@@ -15,14 +15,17 @@ new one, read those files and follow them rather than inventing a shape.
 | Edit modal | `src/components/EditSiteModal.tsx` |
 | History modal (shared, do not fork) | `src/components/HistoryModal.tsx` |
 | Page-size control (shared) | `src/components/PageSizeSelect.tsx` |
-| Column filter row (shared) | `src/components/TableFilters.tsx` |
+| Column filter funnel (shared) | `src/components/ColumnFilter.tsx` |
+| Search-all-fields box (shared) | `src/components/TableSearch.tsx` |
+| Filter state owner (shared) | `src/components/ListFilters.tsx` |
 | Filter condition builders (shared) | `src/lib/listFilters.ts` |
 | History helpers (shared) | `src/lib/updateHistory.ts` |
 | Index setup | `src/lib/mongodb.ts` |
 | Nav links | `src/components/Navbar.tsx` |
 
-`HistoryModal`, `PageSizeSelect`, `TableFilters`, `LocalDate` and everything
-in `src/lib/updateHistory.ts` and `src/lib/listFilters.ts` are shared. Reuse them; only the page, the two
+`HistoryModal`, `PageSizeSelect`, `ListFilters`, `ColumnFilter`, `TableSearch`,
+`LocalDate` and everything in `src/lib/updateHistory.ts` and
+`src/lib/listFilters.ts` are shared. Reuse them; only the page, the two
 endpoints and the two entity-specific modals are new per feature.
 
 ## Document shape
@@ -162,21 +165,57 @@ reader believes they excluded is worse than an empty table they can see.
 A filter over a referenced collection resolves through it first: the users
 page turns a typed type name into ids, then matches `types: { $in: ids }`.
 
-On the page:
+### Search all fields
 
-- Render `<TableFilters basePath="/route" columns={…} values={filters} />` as
-  a second `<tr>` in `<thead>`. `columns` lists every column **after** No., in
-  order, with `null` for ones that are not filterable — derived values and
-  Actions — so the row stays aligned with the headers.
+A `q` parameter matched against every field at once, for when you know a
+fragment but not which column it is in. Build it as an `$or` over the
+entity's fields, and resolve references the same way the column filter does:
+
+```ts
+if (search) {
+  filter.$or = [
+    { name: textCondition(search) },
+    { email: textCondition(search) },
+    { types: { $in: await typeIdsMatching(search) } },
+  ];
+}
+```
+
+Branches that cannot read the term match nothing rather than erroring, so a
+numeric field and a text field can sit in the same `$or` safely.
+
+### On the page
+
+- Wrap the whole table region in
+  `<ListFilters basePath="/route" initial={{ q: search, ...filters }}>`.
+- Render `<TableSearch />` above the table.
+- Put `<ColumnFilter column={…} />` beside each filterable column's heading.
+  Keep the column definitions in a `const X_FILTER_COLUMNS` beside the page's
+  other constants and map over it, so headings and filters cannot drift apart.
 - Keep the table rendered when a filter matches nothing, with a message row in
-  the `<tbody>`. Hiding the table takes the filter row with it and leaves no
-  way to undo the filter. Only fall back to "No X yet." when there are no
-  filters at all.
-- Pagination links must carry the filters, or paging silently clears them. Use
-  a `pageHref(targetPage)` helper rather than a hardcoded query string.
+  the `<tbody>` — hiding it takes the filter controls away and leaves no way
+  to undo the filter. Only fall back to "No X yet." when nothing is filtered.
+- Pagination links must carry every filter and the search, or paging silently
+  clears them. Use a `pageHref(targetPage)` helper, not a hardcoded string.
 
-`TableFilters` keeps values in the URL, debounces typing into one request per
-word, and drops the `page` param on every change.
+**One owner, one push.** `ListFilters` holds every filter value on the page
+and writes them as a single URL update. Do not give a filter component its own
+push: when two components each pushed the whole query string, two changes
+inside one debounce window raced — `router.push` is async, so the second read a
+URL the first had not yet updated and silently reverted it, leaving an input
+showing one value and the table another.
+
+**A filter behind an icon has to announce itself.** An active funnel is filled
+and drawn in the accent colour and names its value in the tooltip, and the
+count above the table reads "N matching". Each control clears only what it
+shows, so no button silently wipes another's value.
+
+**Panels are portalled and positioned against the viewport**, since the table
+sits in an overflow container that would clip a panel dropping out of a
+heading. They follow their button on scroll rather than closing — closing was
+wrong, because clicking a funnel in a partly off-screen column makes the
+browser scroll the table to reveal it, and that scroll arrives after the panel
+opens, so the first click appeared to do nothing.
 
 ## Modals
 
@@ -214,8 +253,10 @@ the existing pill classes, so it appears in the mobile panel too.
 - Each validation and duplicate path returns the status and message intended.
 - The modal drives correctly in a browser: add, edit, cancel, duplicate error,
   and the history modal opening from a row.
-- Filters narrow the count and the page count, survive paging, and the filter
-  row has exactly as many cells as the header has columns.
+- Filters narrow the count and the page count and survive paging; the search
+  box matches on each field in turn; both compose rather than replacing each
+  other. Check a filter panel opens on the first click in a column that starts
+  off-screen at 375px wide.
 
 There is no MongoDB in the Claude Code web sandbox and its network policy
 blocks one being fetched, so the database paths cannot be exercised there.
