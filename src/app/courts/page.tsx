@@ -19,7 +19,8 @@ import {
   textCondition,
 } from "@/lib/listFilters";
 import { getMongoClient } from "@/lib/mongodb";
-import { formatTime, sortRanges } from "@/lib/timeRanges";
+import { formatInterval, formatTime } from "@/lib/timeRanges";
+import { weekdayShort, type Weekday } from "@/lib/weekdays";
 
 const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
@@ -36,7 +37,10 @@ interface CourtRow {
   _id: unknown;
   number: number;
   siteName: string | null;
-  availability?: { startMinutes: number; endMinutes: number }[];
+  /** As stored: days Monday-first, each holding time-range ids and a slot size. */
+  availabilityTimes?: { day: Weekday; times: unknown[]; interval: number }[];
+  /** Every range those ids point at, resolved in one lookup. */
+  rangeDocs?: { _id: unknown; startMinutes: number; endMinutes: number }[];
 }
 
 function firstValue(value: string | string[] | undefined) {
@@ -153,14 +157,15 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
             { $sort: { "site.name": 1, number: 1 } },
             { $skip: (page - 1) * pageSize },
             { $limit: pageSize },
-            // Availability is stored as time-range ids; resolve them here so
-            // the table can show the times without a query per row.
+            // Availability holds time-range ids per day. One lookup pulls
+            // every range a court references; the rows are matched back to
+            // their day below, rather than querying per row.
             {
               $lookup: {
                 from: "time-ranges",
-                localField: "availabilityTimes",
+                localField: "availabilityTimes.times",
                 foreignField: "_id",
-                as: "availability",
+                as: "rangeDocs",
               },
             },
             {
@@ -168,8 +173,10 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                 _id: 1,
                 number: 1,
                 siteName: { $ifNull: ["$site.name", null] },
-                "availability.startMinutes": 1,
-                "availability.endMinutes": 1,
+                availabilityTimes: 1,
+                "rangeDocs._id": 1,
+                "rangeDocs.startMinutes": 1,
+                "rangeDocs.endMinutes": 1,
               },
             },
           ])
@@ -259,7 +266,13 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                   )}
                   {courts.map((court, index) => {
                     const id = String(court._id);
-                    const availability = sortRanges(court.availability ?? []);
+                    const rangeById = new Map(
+                      (court.rangeDocs ?? []).map((range) => [
+                        String(range._id),
+                        range,
+                      ]),
+                    );
+                    const availability = court.availabilityTimes ?? [];
 
                     return (
                     <tr
@@ -278,14 +291,33 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                       <td className="px-4 py-3">{court.siteName ?? "—"}</td>
                       <td className="px-4 py-3">{court.number}</td>
                       <td className="px-4 py-3 text-foreground/60">
-                        {availability.length === 0
-                          ? "—"
-                          : availability
-                              .map(
-                                (range) =>
-                                  `${formatTime(range.startMinutes)}–${formatTime(range.endMinutes)}`,
-                              )
-                              .join(", ")}
+                        {availability.length === 0 ? (
+                          "—"
+                        ) : (
+                          <ul className="flex flex-col gap-0.5">
+                            {availability.map((entry) => (
+                              <li
+                                key={entry.day}
+                                className="whitespace-nowrap text-xs"
+                              >
+                                <span className="font-medium text-foreground">
+                                  {weekdayShort(entry.day)}
+                                </span>{" "}
+                                {entry.times
+                                  .map((timeId) => rangeById.get(String(timeId)))
+                                  .filter((range) => range !== undefined)
+                                  .map(
+                                    (range) =>
+                                      `${formatTime(range.startMinutes)}–${formatTime(range.endMinutes)}`,
+                                  )
+                                  .join(", ") || "—"}{" "}
+                                <span className="text-foreground/40">
+                                  @ {formatInterval(entry.interval)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </td>
                     </tr>
                     );

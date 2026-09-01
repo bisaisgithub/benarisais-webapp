@@ -5,11 +5,21 @@ import { useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useCourtSelection } from "@/components/CourtSelection";
 import {
+  durationMinutes,
   findOverlap,
+  formatInterval,
+  intervalToMinutes,
+  INTERVAL_OPTIONS,
   rangesOverlap,
   sortRanges,
   type RangeLike,
 } from "@/lib/timeRanges";
+import {
+  WEEKDAYS,
+  weekdayLabel,
+  weekdayShort,
+  type Weekday,
+} from "@/lib/weekdays";
 
 interface TimeRangeOption extends RangeLike {
   _id: string;
@@ -30,6 +40,8 @@ export default function AddAvailabilityBar() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string[]>([]);
+  const [days, setDays] = useState<Weekday[]>([]);
+  const [interval, setInterval] = useState("1");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -54,6 +66,8 @@ export default function AddAvailabilityBar() {
 
   function openModal() {
     setChosen([]);
+    setDays([]);
+    setInterval("1");
     setSaveError(null);
     setIsOpen(true);
     loadTimeRanges();
@@ -63,6 +77,16 @@ export default function AddAvailabilityBar() {
     options.filter((option) => chosen.includes(option._id)),
   );
   const clash = findOverlap(chosenRanges);
+
+  const orderedDays = WEEKDAYS.filter((day) => days.includes(day));
+  const numericInterval = Number(interval);
+  const slotMinutes = intervalToMinutes(numericInterval);
+
+  // A slot longer than a range leaves nothing bookable in it.
+  const tooShort = chosenRanges.find(
+    (range) =>
+      durationMinutes(range.startMinutes, range.endMinutes) < slotMinutes,
+  );
 
   /** An option is blocked when it would overlap something already chosen. */
   function blockedBy(option: TimeRangeOption): TimeRangeOption | null {
@@ -79,6 +103,16 @@ export default function AddAvailabilityBar() {
       setSaveError("Those availability times overlap.");
       return;
     }
+    if (orderedDays.length === 0) {
+      setSaveError("Select at least one day of the week.");
+      return;
+    }
+    if (tooShort) {
+      setSaveError(
+        `${tooShort.label} is shorter than a ${formatInterval(numericInterval)} booking slot.`,
+      );
+      return;
+    }
 
     setIsSaving(true);
     setSaveError(null);
@@ -88,7 +122,9 @@ export default function AddAvailabilityBar() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courtIds: selected,
+          days: orderedDays,
           timeRangeIds: chosenRanges.map((range) => range._id),
+          interval: numericInterval,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -173,6 +209,50 @@ export default function AddAvailabilityBar() {
 
                 <form onSubmit={handleSubmit} className="mt-4">
                   <fieldset>
+                    <legend className="text-sm font-medium">Days</legend>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {WEEKDAYS.map((day) => {
+                        const on = days.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() =>
+                              setDays((current) =>
+                                current.includes(day)
+                                  ? current.filter((other) => other !== day)
+                                  : [...current, day],
+                              )
+                            }
+                            aria-pressed={on}
+                            aria-label={weekdayLabel(day)}
+                            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                              on
+                                ? "border-accent bg-accent text-background"
+                                : "border-foreground/15 hover:bg-foreground/10"
+                            }`}
+                          >
+                            {weekdayShort(day)}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDays((current) =>
+                            current.length === WEEKDAYS.length
+                              ? []
+                              : [...WEEKDAYS],
+                          )
+                        }
+                        className="rounded-full px-3 py-1 text-xs text-foreground/60 transition-colors hover:bg-foreground/10 hover:text-foreground"
+                      >
+                        {days.length === WEEKDAYS.length ? "None" : "All days"}
+                      </button>
+                    </div>
+                  </fieldset>
+
+                  <fieldset className="mt-4">
                     <legend className="text-sm font-medium">
                       Availability times
                     </legend>
@@ -237,20 +317,46 @@ export default function AddAvailabilityBar() {
                     </div>
                   </fieldset>
 
+                  <div className="mt-4">
+                    <label
+                      htmlFor="availability-interval"
+                      className="block text-sm font-medium"
+                    >
+                      Booking interval
+                    </label>
+                    <select
+                      id="availability-interval"
+                      value={interval}
+                      onChange={(event) => setInterval(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                    >
+                      {INTERVAL_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {formatInterval(option)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-foreground/50">
+                      How each range is divided into bookable slots.
+                    </p>
+                  </div>
+
                   <div className="mt-3 rounded-xl border border-foreground/10 bg-foreground/5 p-3 text-sm">
                     <p className="text-foreground/70">
                       Will save:{" "}
                       <span className="font-medium text-foreground">
                         {chosenRanges.length === 0
                           ? "no availability"
-                          : chosenRanges
-                              .map((range) => range.label)
-                              .join(", ")}
+                          : orderedDays.length === 0
+                            ? "pick at least one day"
+                            : `${orderedDays.map(weekdayShort).join(", ")} · ${chosenRanges
+                                .map((range) => range.label)
+                                .join(", ")} · ${formatInterval(numericInterval)} slots`}
                       </span>
                     </p>
-                    {chosenRanges.length > 1 && (
+                    {chosenRanges.length > 0 && orderedDays.length > 0 && (
                       <p className="mt-1 text-xs text-foreground/50">
-                        Saved in ascending order.
+                        Saved Monday first, times ascending.
                       </p>
                     )}
                   </div>
@@ -259,6 +365,12 @@ export default function AddAvailabilityBar() {
                     <p className="mt-2 text-xs text-red-500">
                       {chosenRanges[clash[0]].label} overlaps{" "}
                       {chosenRanges[clash[1]].label}.
+                    </p>
+                  )}
+                  {tooShort && (
+                    <p className="mt-2 text-xs text-red-500">
+                      {tooShort.label} is shorter than a{" "}
+                      {formatInterval(numericInterval)} booking slot.
                     </p>
                   )}
                   {saveError && (
@@ -275,7 +387,12 @@ export default function AddAvailabilityBar() {
                     </button>
                     <button
                       type="submit"
-                      disabled={isSaving || Boolean(clash)}
+                      disabled={
+                        isSaving ||
+                        Boolean(clash) ||
+                        Boolean(tooShort) ||
+                        (chosenRanges.length > 0 && orderedDays.length === 0)
+                      }
                       className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSaving ? "Saving…" : "Save bulk"}

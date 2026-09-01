@@ -3,11 +3,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
 import {
+  durationMinutes,
   findOverlap,
+  formatInterval,
   formatTime,
+  intervalToMinutes,
+  isValidInterval,
+  MAX_INTERVAL_HOURS,
   sortRanges,
   type RangeLike,
 } from "@/lib/timeRanges";
+import {
+  isWeekday,
+  sortWeekdays,
+  weekdayLabel,
+  type Weekday,
+} from "@/lib/weekdays";
 import {
   pushUpdateHistory,
   type UpdateHistoryEntry,
@@ -19,10 +30,17 @@ interface TimeRangeDocument extends RangeLike {
   interval: number;
 }
 
+/** One day's bookable availability: which ranges, and the booking slot size. */
+interface AvailabilityEntry {
+  day: Weekday;
+  times: ObjectId[];
+  interval: number;
+}
+
 interface CourtDocument {
   siteId: ObjectId;
   number: number;
-  availabilityTimes?: ObjectId[];
+  availabilityTimes?: AvailabilityEntry[];
   updateHistory?: UpdateHistoryEntry[];
 }
 
@@ -42,8 +60,8 @@ function readIds(value: unknown, max: number): string[] | null {
 }
 
 /**
- * Sets the availability of one or more courts to the same set of time
- * ranges, in one write.
+ * Sets the availability of one or more courts, in one write: the chosen time
+ * ranges and booking interval are applied to each chosen day of the week.
  *
  * This replaces each selected court's availability rather than adding to it:
  * merging would give every court a different result depending on what it
@@ -86,12 +104,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { courtIds, timeRangeIds } = body as Record<string, unknown>;
+    const { courtIds, days, timeRangeIds, interval } = body as Record<
+      string,
+      unknown
+    >;
 
     const courts = readIds(courtIds, MAX_COURTS_PER_SAVE);
     if (!courts) {
       return NextResponse.json(
         { error: "Select at least one court." },
+        { status: 400 },
+      );
+    }
+
+    const chosenDays = Array.isArray(days) ? [...new Set(days.map(String))] : [];
+    if (chosenDays.length === 0 || !chosenDays.every(isWeekday)) {
+      return NextResponse.json(
+        { error: "Select at least one day of the week." },
+        { status: 400 },
+      );
+    }
+
+    const numericInterval = typeof interval === "number" ? interval : NaN;
+    if (!isValidInterval(numericInterval)) {
+      return NextResponse.json(
+        {
+          error: `Booking interval must be 0.5 or a whole number of hours up to ${MAX_INTERVAL_HOURS}.`,
+        },
         { status: 400 },
       );
     }
@@ -134,6 +173,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // A booking slot longer than the range it sits in yields no bookable
+    // slot at all, which is a setting worth refusing rather than storing.
+    const slotMinutes = intervalToMinutes(numericInterval);
+    const tooShort = sorted.find(
+      (range) =>
+        durationMinutes(range.startMinutes, range.endMinutes) < slotMinutes,
+    );
+    if (tooShort) {
+      return NextResponse.json(
+        {
+          error: `${formatTime(tooShort.startMinutes)} – ${formatTime(tooShort.endMinutes)} is shorter than a ${formatInterval(numericInterval)} booking slot.`,
+        },
+        { status: 400 },
+      );
+    }
+
     const courtObjectIds = courts.map((id) => new ObjectId(id));
     const collection = db.collection<CourtDocument>("courts");
     const matching = await collection.countDocuments({
@@ -146,27 +201,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Stored ascending, so anything reading a court's availability gets it
-    // in order without having to sort.
-    const availabilityTimes = sorted.map((range) => range._id);
-    const labels = sorted.map(
+    // Days Monday-first, times ascending within each — so anything reading a
+    // court's availability gets it in order without having to sort.
+    const times = sorted.map((range) => range._id);
+    const availabilityTimes: AvailabilityEntry[] = sortWeekdays(
+      chosenDays.map((day) => ({
+        day,
+        times,
+        interval: numericInterval,
+      })),
+    );
+
+    const rangeLabels = sorted.map(
       (range) =>
         `${formatTime(range.startMinutes)} – ${formatTime(range.endMinutes)}`,
     );
+    const labels =
+      rangeLabels.length === 0
+        ? "none"
+        : availabilityTimes.map(
+            (entry) =>
+              `${weekdayLabel(entry.day)}: ${rangeLabels.join(", ")} @ ${formatInterval(entry.interval)}`,
+          );
 
     const result = await collection.updateMany(
       { _id: { $in: courtObjectIds } },
       {
-        $set: { availabilityTimes },
+        // No times chosen means no availability at all, rather than a set of
+        // days each holding an empty list.
+        $set: { availabilityTimes: times.length === 0 ? [] : availabilityTimes },
         $push: pushUpdateHistory(authCheck.userId, {
-          availabilityTimes: labels.length > 0 ? labels : "none",
+          availabilityTimes: labels,
         }),
       },
     );
 
     return NextResponse.json({
       updated: result.modifiedCount,
-      availabilityTimes: labels,
+      days: availabilityTimes.map((entry) => entry.day),
+      times: rangeLabels,
+      interval: numericInterval,
     });
   } catch (error) {
     console.error("Failed to save court availability:", error);
