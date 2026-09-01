@@ -196,3 +196,58 @@ export function readTimeRangeBody(
 
   return { interval: numericInterval, startMinutes, endMinutes };
 }
+
+export interface RangeLike {
+  startMinutes: number;
+  endMinutes: number;
+}
+
+/**
+ * The minutes a range occupies, as half-open [start, end) segments on a
+ * single day. A range that wraps past midnight becomes two segments, which
+ * is what lets overlap be compared without special-casing the wrap at every
+ * call site.
+ */
+export function toSegments(range: RangeLike): [number, number][] {
+  const { startMinutes, endMinutes } = range;
+  if (endMinutes > startMinutes) {
+    return [[startMinutes, endMinutes]];
+  }
+  return [
+    [startMinutes, MINUTES_PER_DAY],
+    [0, endMinutes],
+  ];
+}
+
+/**
+ * Whether two ranges share any minute. Segments are half-open, so ranges
+ * that merely touch — 09:00–10:00 and 10:00–11:00 — do not overlap, which
+ * is what makes back-to-back availability slots legal.
+ */
+export function rangesOverlap(a: RangeLike, b: RangeLike): boolean {
+  return toSegments(a).some(([aStart, aEnd]) =>
+    toSegments(b).some(
+      ([bStart, bEnd]) => aStart < bEnd && bStart < aEnd,
+    ),
+  );
+}
+
+/** The first overlapping pair, as indexes into the list, or null. */
+export function findOverlap(ranges: RangeLike[]): [number, number] | null {
+  for (let i = 0; i < ranges.length; i++) {
+    for (let j = i + 1; j < ranges.length; j++) {
+      if (rangesOverlap(ranges[i], ranges[j])) {
+        return [i, j];
+      }
+    }
+  }
+  return null;
+}
+
+/** Ascending by start, then by end. Ranges that wrap sort by their start. */
+export function sortRanges<T extends RangeLike>(ranges: T[]): T[] {
+  return [...ranges].sort(
+    (a, b) =>
+      a.startMinutes - b.startMinutes || a.endMinutes - b.endMinutes,
+  );
+}

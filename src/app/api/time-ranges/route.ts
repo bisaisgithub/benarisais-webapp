@@ -4,7 +4,10 @@ import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureTimeRangeIndexes, getMongoClient } from "@/lib/mongodb";
 import {
   DUPLICATE_MESSAGE,
+  formatInterval,
+  formatTime,
   readTimeRangeBody,
+  sortRanges,
 } from "@/lib/timeRanges";
 import type { UpdateHistoryEntry } from "@/lib/updateHistory";
 
@@ -27,6 +30,50 @@ async function getDb(): Promise<Db> {
 }
 
 
+
+/** Every time range, ascending, for the availability picker. */
+export async function GET(request: NextRequest) {
+  const authCheck = getAuthenticatedUserId(request);
+  if ("error" in authCheck) {
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
+  }
+
+  try {
+    const db = await getDb();
+
+    if (!(await isAdmin(db, authCheck.userId))) {
+      return NextResponse.json(
+        { error: "Admin access required." },
+        { status: 403 },
+      );
+    }
+
+    const ranges = await db
+      .collection<TimeRangeDocument>(COLLECTION_NAME)
+      .find()
+      .toArray();
+
+    return NextResponse.json({
+      timeRanges: sortRanges(ranges).map((range) => ({
+        _id: range._id.toString(),
+        interval: range.interval,
+        startMinutes: range.startMinutes,
+        endMinutes: range.endMinutes,
+        label: `${formatTime(range.startMinutes)} – ${formatTime(range.endMinutes)}`,
+        intervalLabel: formatInterval(range.interval),
+      })),
+    });
+  } catch (error) {
+    console.error("Failed to load time ranges:", error);
+    return NextResponse.json(
+      { error: "Could not load time ranges. Please try again later." },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);

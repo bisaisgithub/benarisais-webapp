@@ -2,7 +2,12 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import AddCourtsModal from "@/components/AddCourtsModal";
+import AddAvailabilityBar from "@/components/AddAvailabilityBar";
 import ColumnFilter from "@/components/ColumnFilter";
+import CourtSelection, {
+  RowCheckbox,
+  SelectAllCheckbox,
+} from "@/components/CourtSelection";
 import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import TableSearch from "@/components/TableSearch";
@@ -14,6 +19,7 @@ import {
   textCondition,
 } from "@/lib/listFilters";
 import { getMongoClient } from "@/lib/mongodb";
+import { formatTime, sortRanges } from "@/lib/timeRanges";
 
 const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
@@ -30,6 +36,7 @@ interface CourtRow {
   _id: unknown;
   number: number;
   siteName: string | null;
+  availability?: { startMinutes: number; endMinutes: number }[];
 }
 
 function firstValue(value: string | string[] | undefined) {
@@ -146,11 +153,23 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
             { $sort: { "site.name": 1, number: 1 } },
             { $skip: (page - 1) * pageSize },
             { $limit: pageSize },
+            // Availability is stored as time-range ids; resolve them here so
+            // the table can show the times without a query per row.
+            {
+              $lookup: {
+                from: "time-ranges",
+                localField: "availabilityTimes",
+                foreignField: "_id",
+                as: "availability",
+              },
+            },
             {
               $project: {
                 _id: 1,
                 number: 1,
                 siteName: { $ifNull: ["$site.name", null] },
+                "availability.startMinutes": 1,
+                "availability.endMinutes": 1,
               },
             },
           ])
@@ -204,10 +223,16 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
             <ListFilters basePath="/courts" initial={{ q: search, site: siteFilter, number: numberFilter }}>
             <TableSearch />
 
+            <CourtSelection ids={courts.map((court) => String(court._id))}>
+            <AddAvailabilityBar />
+
             <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
               <table className="w-full min-w-[480px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
+                    <th className="w-10 px-4 py-3">
+                      <SelectAllCheckbox />
+                    </th>
                     <th className="px-4 py-3 font-medium">No.</th>
                     {COURT_FILTER_COLUMNS.map(({ heading, column }) => (
                       <th
@@ -218,34 +243,58 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                         <ColumnFilter column={column} />
                       </th>
                     ))}
+                    <th className="px-4 py-3 font-medium">Availability</th>
                   </tr>
                 </thead>
                 <tbody>
                   {courts.length === 0 && (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={5}
                         className="px-4 py-6 text-center text-sm text-foreground/60"
                       >
                         No courts match these filters.
                       </td>
                     </tr>
                   )}
-                  {courts.map((court, index) => (
+                  {courts.map((court, index) => {
+                    const id = String(court._id);
+                    const availability = sortRanges(court.availability ?? []);
+
+                    return (
                     <tr
-                      key={String(court._id)}
+                      key={id}
                       className="border-b border-foreground/10 last:border-0"
                     >
+                      <td className="px-4 py-3">
+                        <RowCheckbox
+                          id={id}
+                          label={`${court.siteName ?? "court"} ${court.number}`}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-foreground/60">
                         {firstRowNumber + index}
                       </td>
                       <td className="px-4 py-3">{court.siteName ?? "—"}</td>
                       <td className="px-4 py-3">{court.number}</td>
+                      <td className="px-4 py-3 text-foreground/60">
+                        {availability.length === 0
+                          ? "—"
+                          : availability
+                              .map(
+                                (range) =>
+                                  `${formatTime(range.startMinutes)}–${formatTime(range.endMinutes)}`,
+                              )
+                              .join(", ")}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+
+            </CourtSelection>
 
             <div className="mt-4 flex items-center justify-between gap-4">
               <p className="text-sm text-foreground/60">
