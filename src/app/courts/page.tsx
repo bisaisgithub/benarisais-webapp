@@ -191,6 +191,33 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const firstRowNumber = (page - 1) * pageSize + 1;
 
+  // Formatted once, and used both by the table and by the save-availability
+  // modal, so what the modal reports as currently saved is exactly what the
+  // row shows.
+  const courtSummaries = courts.map((court) => {
+    const rangeById = new Map(
+      (court.rangeDocs ?? []).map((range) => [String(range._id), range]),
+    );
+
+    return {
+      id: String(court._id),
+      label: `${court.siteName ?? "Court"} ${court.number}`,
+      availability: (court.availabilityTimes ?? []).map((entry) => ({
+        day: weekdayShort(entry.day),
+        times:
+          entry.times
+            .map((timeId) => rangeById.get(String(timeId)))
+            .filter((range) => range !== undefined)
+            .map(
+              (range) =>
+                `${formatTime(range.startMinutes)}–${formatTime(range.endMinutes)}`,
+            )
+            .join(", ") || "—",
+        interval: formatInterval(entry.interval),
+      })),
+    };
+  });
+
   function pageHref(targetPage: number) {
     const params = new URLSearchParams({
       page: String(targetPage),
@@ -230,7 +257,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
             <ListFilters basePath="/courts" initial={{ q: search, site: siteFilter, number: numberFilter }}>
             <TableSearch />
 
-            <CourtSelection ids={courts.map((court) => String(court._id))}>
+            <CourtSelection courts={courtSummaries}>
             <AddAvailabilityBar />
 
             <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
@@ -265,14 +292,9 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                     </tr>
                   )}
                   {courts.map((court, index) => {
-                    const id = String(court._id);
-                    const rangeById = new Map(
-                      (court.rangeDocs ?? []).map((range) => [
-                        String(range._id),
-                        range,
-                      ]),
-                    );
-                    const availability = court.availabilityTimes ?? [];
+                    const summary = courtSummaries[index];
+                    const id = summary.id;
+                    const availability = summary.availability;
 
                     return (
                     <tr
@@ -280,10 +302,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                       className="border-b border-foreground/10 last:border-0"
                     >
                       <td className="px-4 py-3">
-                        <RowCheckbox
-                          id={id}
-                          label={`${court.siteName ?? "court"} ${court.number}`}
-                        />
+                        <RowCheckbox id={id} label={summary.label} />
                       </td>
                       <td className="px-4 py-3 text-foreground/60">
                         {firstRowNumber + index}
@@ -301,18 +320,11 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                                 className="whitespace-nowrap text-xs"
                               >
                                 <span className="font-medium text-foreground">
-                                  {weekdayShort(entry.day)}
+                                  {entry.day}
                                 </span>{" "}
-                                {entry.times
-                                  .map((timeId) => rangeById.get(String(timeId)))
-                                  .filter((range) => range !== undefined)
-                                  .map(
-                                    (range) =>
-                                      `${formatTime(range.startMinutes)}–${formatTime(range.endMinutes)}`,
-                                  )
-                                  .join(", ") || "—"}{" "}
+                                {entry.times}{" "}
                                 <span className="text-foreground/40">
-                                  @ {formatInterval(entry.interval)}
+                                  @ {entry.interval}
                                 </span>
                               </li>
                             ))}

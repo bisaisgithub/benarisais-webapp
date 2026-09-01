@@ -2,8 +2,16 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 
+/** A row's current state, formatted on the server for display in the modal. */
+export interface CourtSummary {
+  id: string;
+  label: string;
+  availability: { day: string; times: string; interval: string }[];
+}
+
 interface CourtSelectionContextValue {
   selected: string[];
+  selectedCourts: CourtSummary[];
   isSelected: (id: string) => boolean;
   toggle: (id: string) => void;
   toggleAll: () => void;
@@ -31,12 +39,13 @@ export function useCourtSelection(): CourtSelectionContextValue {
  * of page or filter starts the selection over.
  */
 export default function CourtSelection({
-  ids,
+  courts,
   children,
 }: {
-  ids: string[];
+  courts: CourtSummary[];
   children: ReactNode;
 }) {
+  const ids = courts.map((court) => court.id);
   const [selected, setSelected] = useState<string[]>([]);
 
   // Adjusting during render rather than in an effect, which is React's
@@ -54,6 +63,7 @@ export default function CourtSelection({
 
   const value: CourtSelectionContextValue = {
     selected: visible,
+    selectedCourts: courts.filter((court) => visible.includes(court.id)),
     isSelected: (id) => visible.includes(id),
     toggle: (id) =>
       setSelected((current) =>

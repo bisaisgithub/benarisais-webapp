@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { useCourtSelection } from "@/components/CourtSelection";
+import {
+  useCourtSelection,
+  type CourtSummary,
+} from "@/components/CourtSelection";
 import {
   durationMinutes,
   findOverlap,
@@ -31,10 +34,15 @@ interface TimeRangeOption extends RangeLike {
 /**
  * Appears once rows are ticked, and applies one set of availability times to
  * all of them at once.
+ *
+ * "Save", not "Add": each write replaces the selected courts' availability
+ * outright, and a label promising to add would misdescribe what the button
+ * does the moment a court already has some.
  */
 export default function AddAvailabilityBar() {
   const router = useRouter();
-  const { selected, clear, someSelected } = useCourtSelection();
+  const { selected, selectedCourts, clear, someSelected } =
+    useCourtSelection();
 
   const [isOpen, setIsOpen] = useState(false);
   const [options, setOptions] = useState<TimeRangeOption[]>([]);
@@ -162,7 +170,7 @@ export default function AddAvailabilityBar() {
         onClick={openModal}
         className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
       >
-        Add availability
+        Save availability
       </button>
       <button
         type="button"
@@ -192,7 +200,7 @@ export default function AddAvailabilityBar() {
                     id="availability-modal-title"
                     className="text-lg font-semibold tracking-tight sm:text-xl"
                   >
-                    Add Availability
+                    Save Availability
                   </h2>
                   <button
                     type="button"
@@ -209,6 +217,8 @@ export default function AddAvailabilityBar() {
                   {selected.length === 1 ? "selected court" : "selected courts"}
                   .
                 </p>
+
+                <CurrentAvailability courts={selectedCourts} />
 
                 <form onSubmit={handleSubmit} className="mt-4">
                   <fieldset>
@@ -420,6 +430,81 @@ export default function AddAvailabilityBar() {
           </div>,
           document.body,
         )}
+    </div>
+  );
+}
+
+function describe(court: CourtSummary): string {
+  if (court.availability.length === 0) {
+    return "none";
+  }
+  return court.availability
+    .map((entry) => `${entry.day} ${entry.times} @ ${entry.interval}`)
+    .join(" · ");
+}
+
+/**
+ * What the selected courts hold right now, so a bulk save is made with the
+ * current state in view rather than blind. Courts that already agree are
+ * collapsed into one line; where they differ, each is listed, since that is
+ * exactly the case where replacing them all is easy to regret.
+ */
+function CurrentAvailability({ courts }: { courts: CourtSummary[] }) {
+  if (courts.length === 0) {
+    return null;
+  }
+
+  const described = courts.map((court) => ({
+    court,
+    text: describe(court),
+  }));
+  const allSame = described.every(({ text }) => text === described[0].text);
+
+  return (
+    <div className="mt-3 rounded-xl border border-foreground/10 bg-foreground/5 p-3">
+      <p className="text-xs font-medium text-foreground/60">
+        Currently saved
+      </p>
+
+      {allSame ? (
+        <p className="mt-1 text-sm">
+          {described[0].text === "none" ? (
+            <span className="text-foreground/60">
+              {courts.length === 1
+                ? "This court has no availability yet."
+                : "None of these courts have availability yet."}
+            </span>
+          ) : (
+            <>
+              {courts.length > 1 && (
+                <span className="text-foreground/60">All {courts.length}: </span>
+              )}
+              {described[0].text}
+            </>
+          )}
+        </p>
+      ) : (
+        <ul className="mt-1 max-h-28 overflow-y-auto text-sm">
+          {described.map(({ court, text }) => (
+            <li key={court.id} className="flex gap-2 py-0.5">
+              <span className="shrink-0 text-foreground/60">
+                {court.label}
+              </span>
+              <span
+                className={text === "none" ? "text-foreground/40" : undefined}
+              >
+                {text}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!allSame && (
+        <p className="mt-1 text-xs text-foreground/50">
+          These courts differ — saving sets them all to the same availability.
+        </p>
+      )}
     </div>
   );
 }
