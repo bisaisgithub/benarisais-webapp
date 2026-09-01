@@ -1,0 +1,168 @@
+# List page pattern
+
+The admin list pages (`/sites`, `/users`, `/courts`, `/time-ranges`) are all
+built the same way. **Sites is the reference implementation** — when adding a
+new one, read those files and follow them rather than inventing a shape.
+
+## Reference files
+
+| Concern | File |
+| --- | --- |
+| List page (server component) | `src/app/sites/page.tsx` |
+| Create endpoint | `src/app/api/sites/route.ts` |
+| Update endpoint | `src/app/api/sites/[id]/route.ts` |
+| Add modal | `src/components/AddSiteModal.tsx` |
+| Edit modal | `src/components/EditSiteModal.tsx` |
+| History modal (shared, do not fork) | `src/components/HistoryModal.tsx` |
+| Page-size control (shared) | `src/components/PageSizeSelect.tsx` |
+| History helpers (shared) | `src/lib/updateHistory.ts` |
+| Index setup | `src/lib/mongodb.ts` |
+| Nav links | `src/components/Navbar.tsx` |
+
+`HistoryModal`, `PageSizeSelect`, `LocalDate` and everything in
+`src/lib/updateHistory.ts` are shared. Reuse them; only the page, the two
+endpoints and the two entity-specific modals are new per feature.
+
+## Document shape
+
+Every collection carries the same three fields alongside its own:
+
+```ts
+{
+  // ...the entity's own fields
+  createdAt: Date,
+  createdBy: ObjectId | null,   // ref to users
+  updateHistory: UpdateHistoryEntry[],
+}
+```
+
+Add an `ensureXIndexes()` to `src/lib/mongodb.ts` for any uniqueness the
+entity needs, following `ensureSiteIndexes`: memoised per process, dev copy on
+`globalThis`, and failures logged rather than thrown so a pre-existing
+duplicate cannot take the app down.
+
+## Security
+
+**Authorization is enforced in the backend only. Never gate in client code.**
+
+Both endpoints repeat the same two checks on every request, in this order —
+auth, then admin, then parse, then validate:
+
+```ts
+const authCheck = getAuthenticatedUserId(request);
+if ("error" in authCheck) return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+
+const db = await getDb();
+if (!(await isAdmin(db, authCheck.userId))) {
+  return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+}
+```
+
+The admin check comes **before** body validation on purpose, so a non-admin
+learns nothing about the payload rules.
+
+The page gates its **data fetch**, not the route — it renders
+`"Admin access required."` in place of the table:
+
+```ts
+const authCheck = getAuthenticatedUserIdFromToken(
+  getAccessTokenFromCookieStore(await cookies()),
+);
+```
+
+The Add button is hidden when that check fails, but that is presentation
+only — the endpoint is what actually protects the data.
+
+## Endpoints
+
+- `POST /api/<entity>` creates. `PUT /api/<entity>/[id]` updates. Validate the
+  id with `ObjectId.isValid` and return 400 before touching the database.
+- Trim strings. Reject blanks with 400 and a message an admin can act on.
+- For uniqueness: a pre-insert `findOne` gives a readable 409, and the unique
+  index behind it closes the race. Catch `MongoServerError` code `11000` and
+  return the same 409, since the index is the real guard.
+- Record history on update — never on create, where `createdBy` already says
+  who:
+
+```ts
+const current = await collection.findOne({ _id: objectId });
+const changes = diffChanges({ name: current.name }, { name: trimmedName });
+
+await collection.updateOne({ _id: objectId }, {
+  $set: { name: trimmedName },
+  // Skipped when nothing moved, so a no-op save can't push real edits
+  // out of the capped history.
+  ...(Object.keys(changes).length > 0
+    ? { $push: pushUpdateHistory(authCheck.userId, changes) }
+    : {}),
+});
+```
+
+`pushUpdateHistory` appends with `$slice: -10`, keeping the newest ten. Record
+values as they read on screen, not as ids — user types are stored by their
+text, times by their `HH:MM` — so history stays legible after a rename.
+
+If the collection is untyped, `$push` will not typecheck. Type it:
+`db.collection<XDocument>(COLLECTION_NAME)`.
+
+## Page
+
+- `PageProps<"/route">`, `searchParams` awaited, page size clamped 1–100 with
+  a default of 10.
+- Resolve every actor id on the page in **one** query, never per row:
+
+```ts
+actorNames = await resolveActorNames(db, rows.flatMap((row) => actorIdsOf(row)));
+```
+
+- Table columns are **No. first, Actions last**. `No.` is the row's position
+  in the full result, not the page: `const firstRowNumber = (page - 1) * pageSize + 1`.
+- Actions hold `<EditXModal />` then `<HistoryModal />` in a `flex gap-2`.
+- Pass `basePath="/your-route"` to `PageSizeSelect`.
+- Give the table a `min-w-[…]` wide enough for its columns, inside
+  `overflow-x-auto`, so it scrolls rather than crushing cells on a phone.
+- `actorName(id, actorNames)` falls back to `"Unknown"`. Pass
+  `"Self-registered"` as the third argument only on users, who have no
+  creating admin.
+
+## Modals
+
+Modals are portalled to `document.body` at `z-[60]`; `HistoryModal` sits at
+`z-[70]` so it can open from inside another modal.
+
+Sites keeps add and edit as two components (`AddSiteModal`, `EditSiteModal`)
+because each is a short form. Time ranges uses a single `TimeRangeModal` for
+both, taking an optional existing record, because that form has three fields
+and a live readout worth writing once. Either is fine — split when the forms
+are trivial, share when duplicating would mean maintaining the same form
+twice.
+
+Whichever way, each modal:
+
+- resets its state in `openModal()`, so reopening never shows stale input;
+- validates client-side for fast feedback, and surfaces the server's `error`
+  message verbatim on failure — the server is the authority;
+- calls `router.refresh()` after a successful save;
+- closes on the backdrop, on Cancel, and on ✕.
+
+A form whose values sit on a grid (times, steps) must **snap the value**, not
+just set an `step` attribute — `step` does not constrain typed input.
+
+## Nav
+
+Add a `<Link>` in `src/components/Navbar.tsx` inside `<MobileMenu>`, matching
+the existing pill classes, so it appears in the mobile panel too.
+
+## Before saying it works
+
+- `npm run lint` and `npm run build` both clean.
+- Unauthenticated: every endpoint returns 401 and the page shows
+  `"Admin access required."`
+- Each validation and duplicate path returns the status and message intended.
+- The modal drives correctly in a browser: add, edit, cancel, duplicate error,
+  and the history modal opening from a row.
+
+There is no MongoDB in the Claude Code web sandbox and its network policy
+blocks one being fetched, so the database paths cannot be exercised there.
+Verify the rest by stubbing the data layer, **remove every stub before
+committing**, and say plainly which paths went unverified.
