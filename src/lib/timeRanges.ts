@@ -251,3 +251,28 @@ export function sortRanges<T extends RangeLike>(ranges: T[]): T[] {
       a.startMinutes - b.startMinutes || a.endMinutes - b.endMinutes,
   );
 }
+
+export interface SlotFit {
+  /** Whole booking slots the range yields. */
+  slots: number;
+  /** Minutes left over, which no booking could ever occupy. */
+  remainder: number;
+}
+
+/**
+ * How a range divides into booking slots of `interval` hours.
+ *
+ * A remainder matters: 11:00–13:30 split into 1h slots gives two bookable
+ * hours and a trailing 30 minutes nothing can be booked into. Availability
+ * that cannot be fully booked is a configuration mistake, not a rounding
+ * detail, so callers reject any remainder rather than quietly dropping it.
+ */
+export function slotFit(range: RangeLike, interval: number): SlotFit {
+  const span = durationMinutes(range.startMinutes, range.endMinutes);
+  const slotMinutes = intervalToMinutes(interval);
+
+  return {
+    slots: Math.floor(span / slotMinutes),
+    remainder: span % slotMinutes,
+  };
+}

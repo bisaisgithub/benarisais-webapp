@@ -7,9 +7,10 @@ import {
   findOverlap,
   formatInterval,
   formatTime,
-  intervalToMinutes,
+  formatDuration,
   isValidInterval,
   MAX_INTERVAL_HOURS,
+  slotFit,
   sortRanges,
   type RangeLike,
 } from "@/lib/timeRanges";
@@ -173,17 +174,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // A booking slot longer than the range it sits in yields no bookable
-    // slot at all, which is a setting worth refusing rather than storing.
-    const slotMinutes = intervalToMinutes(numericInterval);
-    const tooShort = sorted.find(
-      (range) =>
-        durationMinutes(range.startMinutes, range.endMinutes) < slotMinutes,
-    );
-    if (tooShort) {
+    // Each range has to divide exactly into booking slots. 11:00 – 13:30
+    // under a 1h interval gives two bookable hours and a trailing 30 minutes
+    // nothing could ever book, so the whole setting is refused rather than
+    // stored with an unreachable tail.
+    const misfit = sorted
+      .map((range) => ({ range, fit: slotFit(range, numericInterval) }))
+      .find(({ fit }) => fit.remainder > 0);
+    if (misfit) {
+      const { range, fit } = misfit;
+      const span = durationMinutes(range.startMinutes, range.endMinutes);
       return NextResponse.json(
         {
-          error: `${formatTime(tooShort.startMinutes)} – ${formatTime(tooShort.endMinutes)} is shorter than a ${formatInterval(numericInterval)} booking slot.`,
+          error: `${formatTime(range.startMinutes)} – ${formatTime(range.endMinutes)} is ${formatDuration(span)}, which does not divide into ${formatInterval(numericInterval)} slots — ${formatDuration(fit.remainder)} would be left over.`,
         },
         { status: 400 },
       );

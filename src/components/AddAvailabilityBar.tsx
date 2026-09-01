@@ -7,10 +7,11 @@ import { useCourtSelection } from "@/components/CourtSelection";
 import {
   durationMinutes,
   findOverlap,
+  formatDuration,
   formatInterval,
-  intervalToMinutes,
   INTERVAL_OPTIONS,
   rangesOverlap,
+  slotFit,
   sortRanges,
   type RangeLike,
 } from "@/lib/timeRanges";
@@ -80,13 +81,15 @@ export default function AddAvailabilityBar() {
 
   const orderedDays = WEEKDAYS.filter((day) => days.includes(day));
   const numericInterval = Number(interval);
-  const slotMinutes = intervalToMinutes(numericInterval);
 
-  // A slot longer than a range leaves nothing bookable in it.
-  const tooShort = chosenRanges.find(
-    (range) =>
-      durationMinutes(range.startMinutes, range.endMinutes) < slotMinutes,
-  );
+  // Each range has to divide exactly into booking slots, or the tail of it
+  // could never be booked.
+  const fitted = chosenRanges.map((range) => ({
+    range,
+    fit: slotFit(range, numericInterval),
+  }));
+  const misfit = fitted.find(({ fit }) => fit.remainder > 0);
+  const totalSlots = fitted.reduce((sum, { fit }) => sum + fit.slots, 0);
 
   /** An option is blocked when it would overlap something already chosen. */
   function blockedBy(option: TimeRangeOption): TimeRangeOption | null {
@@ -107,9 +110,9 @@ export default function AddAvailabilityBar() {
       setSaveError("Select at least one day of the week.");
       return;
     }
-    if (tooShort) {
+    if (misfit) {
       setSaveError(
-        `${tooShort.label} is shorter than a ${formatInterval(numericInterval)} booking slot.`,
+        `${misfit.range.label} does not divide into ${formatInterval(numericInterval)} slots.`,
       );
       return;
     }
@@ -354,11 +357,15 @@ export default function AddAvailabilityBar() {
                                 .join(", ")} · ${formatInterval(numericInterval)} slots`}
                       </span>
                     </p>
-                    {chosenRanges.length > 0 && orderedDays.length > 0 && (
-                      <p className="mt-1 text-xs text-foreground/50">
-                        Saved Monday first, times ascending.
-                      </p>
-                    )}
+                    {chosenRanges.length > 0 &&
+                      orderedDays.length > 0 &&
+                      !misfit && (
+                        <p className="mt-1 text-xs text-foreground/50">
+                          {totalSlots} bookable{" "}
+                          {totalSlots === 1 ? "slot" : "slots"} per day · saved
+                          Sunday first, times ascending.
+                        </p>
+                      )}
                   </div>
 
                   {clash && (
@@ -367,10 +374,19 @@ export default function AddAvailabilityBar() {
                       {chosenRanges[clash[1]].label}.
                     </p>
                   )}
-                  {tooShort && (
+                  {misfit && (
                     <p className="mt-2 text-xs text-red-500">
-                      {tooShort.label} is shorter than a{" "}
-                      {formatInterval(numericInterval)} booking slot.
+                      {misfit.range.label} is{" "}
+                      {formatDuration(
+                        durationMinutes(
+                          misfit.range.startMinutes,
+                          misfit.range.endMinutes,
+                        ),
+                      )}
+                      , which does not divide into{" "}
+                      {formatInterval(numericInterval)} slots —{" "}
+                      {formatDuration(misfit.fit.remainder)} would be left
+                      over.
                     </p>
                   )}
                   {saveError && (
@@ -390,7 +406,7 @@ export default function AddAvailabilityBar() {
                       disabled={
                         isSaving ||
                         Boolean(clash) ||
-                        Boolean(tooShort) ||
+                        Boolean(misfit) ||
                         (chosenRanges.length > 0 && orderedDays.length === 0)
                       }
                       className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"

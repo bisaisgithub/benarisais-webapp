@@ -4,13 +4,13 @@
  * week, and a localised name changes meaning with the reader's locale.
  */
 export const WEEKDAYS = [
+  "sunday",
   "monday",
   "tuesday",
   "wednesday",
   "thursday",
   "friday",
   "saturday",
-  "sunday",
 ] as const;
 
 export type Weekday = (typeof WEEKDAYS)[number];
@@ -29,7 +29,7 @@ export function weekdayShort(day: Weekday): string {
   return weekdayLabel(day).slice(0, 3);
 }
 
-/** Monday first, matching WEEKDAYS, so stored availability reads in order. */
+/** Sunday first, matching WEEKDAYS, so stored availability reads in order. */
 export function sortWeekdays<T extends { day: Weekday }>(entries: T[]): T[] {
   return [...entries].sort(
     (a, b) => WEEKDAYS.indexOf(a.day) - WEEKDAYS.indexOf(b.day),
