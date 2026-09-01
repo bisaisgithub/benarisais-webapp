@@ -5,6 +5,7 @@ import AddSiteModal from "@/components/AddSiteModal";
 import EditSiteModal from "@/components/EditSiteModal";
 import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
+import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import TableFilters from "@/components/TableFilters";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
@@ -151,6 +152,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
           <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
         ) : (
           <>
+            <ListFilters basePath="/sites" initial={{ name: nameFilter }}>
             {sites.length === 0 && !hasFilters ? (
               <p className="mt-8 text-sm text-foreground/60">No sites yet.</p>
             ) : (
@@ -165,13 +167,11 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                         <th className="px-4 py-3 font-medium">Actions</th>
                       </tr>
                       <TableFilters
-                        basePath="/sites"
                         columns={[
                           { key: "name", label: "name", placeholder: "Search name…" },
                           null,
                           null,
                         ]}
-                        values={{ name: nameFilter }}
                       />
                     </thead>
                     <tbody>
@@ -252,6 +252,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                 </div>
               </>
             )}
+            </ListFilters>
           </>
         )}
       </div>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import AddCourtsModal from "@/components/AddCourtsModal";
 import TableFilters from "@/components/TableFilters";
+import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
@@ -183,6 +184,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
           <p className="mt-8 text-sm text-foreground/60">No courts yet.</p>
         ) : (
           <>
+            <ListFilters basePath="/courts" initial={{ site: siteFilter, number: numberFilter }}>
             <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
               <table className="w-full min-w-[480px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
@@ -192,12 +194,10 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                     <th className="px-4 py-3 font-medium">Court No.</th>
                   </tr>
                   <TableFilters
-                    basePath="/courts"
                     columns={[
                       { key: "site", label: "site", placeholder: "Search site…" },
                       { key: "number", label: "court number", placeholder: "Court no…" },
                     ]}
-                    values={{ site: siteFilter, number: numberFilter }}
                   />
                 </thead>
                 <tbody>
@@ -240,6 +240,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                 </PageLink>
               </div>
             </div>
+            </ListFilters>
           </>
         )}
       </div>

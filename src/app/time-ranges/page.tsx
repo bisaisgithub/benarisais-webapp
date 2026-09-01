@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import HistoryModal from "@/components/HistoryModal";
+import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import TableFilters from "@/components/TableFilters";
 import TimeRangeModal from "@/components/TimeRangeModal";
@@ -180,6 +181,7 @@ export default async function TimeRangesPage(
           <p className="mt-8 text-sm text-foreground/60">No time ranges yet.</p>
         ) : (
           <>
+            <ListFilters basePath="/time-ranges" initial={filters}>
             <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
               <table className="w-full min-w-[560px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
@@ -192,7 +194,6 @@ export default async function TimeRangesPage(
                     <th className="px-4 py-3 font-medium">Actions</th>
                   </tr>
                   <TableFilters
-                    basePath="/time-ranges"
                     columns={[
                       { key: "interval", label: "interval", placeholder: "e.g. 0.5" },
                       { key: "start", label: "start time", placeholder: "e.g. 09:00" },
@@ -200,7 +201,6 @@ export default async function TimeRangesPage(
                       null,
                       null,
                     ]}
-                    values={filters}
                   />
                 </thead>
                 <tbody>
@@ -302,6 +302,7 @@ export default async function TimeRangesPage(
                 </PageLink>
               </div>
             </div>
+            </ListFilters>
           </>
         )}
       </div>

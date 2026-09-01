@@ -4,8 +4,10 @@ import type { ReactNode } from "react";
 import EditUserModal from "@/components/EditUserModal";
 import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
+import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import TableFilters from "@/components/TableFilters";
+import TableSearch from "@/components/TableSearch";
 import TypesModal from "@/components/TypesModal";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
@@ -71,6 +73,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
     1,
   );
 
+  const search = filterValue(resolvedSearchParams.q);
   const filters = {
     name: filterValue(resolvedSearchParams.name),
     email: filterValue(resolvedSearchParams.email),
@@ -78,7 +81,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
     message: filterValue(resolvedSearchParams.message),
     type: filterValue(resolvedSearchParams.type),
   };
-  const hasFilters = Object.values(filters).some(Boolean);
+  const hasFilters = Boolean(search) || Object.values(filters).some(Boolean);
 
   let users: (UserRecord & { _id: unknown })[] = [];
   let userTypes: (UserTypeRecord & { _id: unknown })[] = [];
@@ -105,6 +108,17 @@ export default async function UsersPage(props: PageProps<"/users">) {
       } else {
         const collection = db.collection<UserRecord>("users");
 
+        // types holds ids, so text has to be resolved to ids before it can
+        // match. No match leaves an empty $in, which correctly matches no
+        // user rather than every user.
+        const typeIdsMatching = async (text: string) =>
+          (
+            await db
+              .collection<UserTypeRecord>("user-types")
+              .find({ text: textCondition(text) })
+              .toArray()
+          ).map((type) => type._id);
+
         const filter: Record<string, unknown> = {};
         for (const field of ["name", "email", "contact", "message"] as const) {
           if (filters[field]) {
@@ -112,13 +126,19 @@ export default async function UsersPage(props: PageProps<"/users">) {
           }
         }
         if (filters.type) {
-          // types holds ids, so resolve the typed text to ids first. No
-          // match leaves an empty $in, which correctly matches no user.
-          const matchingTypes = await db
-            .collection<UserTypeRecord>("user-types")
-            .find({ text: textCondition(filters.type) })
-            .toArray();
-          filter.types = { $in: matchingTypes.map((type) => type._id) };
+          filter.types = { $in: await typeIdsMatching(filters.type) };
+        }
+        if (search) {
+          // One box across every field, for when you know a fragment but not
+          // which column it is in. Types are resolved the same way as the
+          // column filter, so a search for "admin" finds users by type too.
+          filter.$or = [
+            { name: textCondition(search) },
+            { email: textCondition(search) },
+            { contact: textCondition(search) },
+            { message: textCondition(search) },
+            { types: { $in: await typeIdsMatching(search) } },
+          ];
         }
 
         // Counted with the filter applied, so the page count and the page
@@ -167,6 +187,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
       page: String(targetPage),
       pageSize: String(pageSize),
     });
+    if (search) params.set("q", search);
     for (const [key, value] of Object.entries(filters)) {
       if (value) params.set(key, value);
     }
@@ -200,7 +221,10 @@ export default async function UsersPage(props: PageProps<"/users">) {
           </p>
         ) : (
           <>
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-foreground/10">
+            <ListFilters basePath="/users" initial={{ q: search, ...filters }}>
+            <TableSearch />
+
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
               <table className="w-full min-w-[700px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
@@ -214,7 +238,6 @@ export default async function UsersPage(props: PageProps<"/users">) {
                     <th className="px-4 py-3 font-medium">Actions</th>
                   </tr>
                   <TableFilters
-                    basePath="/users"
                     columns={[
                       { key: "name", label: "name", placeholder: "Search name…" },
                       { key: "email", label: "email", placeholder: "Search email…" },
@@ -224,7 +247,6 @@ export default async function UsersPage(props: PageProps<"/users">) {
                       null,
                       null,
                     ]}
-                    values={filters}
                   />
                 </thead>
                 <tbody>
@@ -329,6 +351,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
                 </PageLink>
               </div>
             </div>
+            </ListFilters>
           </>
         )}
       </div>
