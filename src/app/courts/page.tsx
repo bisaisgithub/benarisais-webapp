@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import AddCourtsModal from "@/components/AddCourtsModal";
+import CourtFilters from "@/components/CourtFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
@@ -31,6 +32,12 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+
+
 export default async function CourtsPage(props: PageProps<"/courts">) {
   const resolvedSearchParams = await props.searchParams;
 
@@ -46,6 +53,10 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
     firstValue(resolvedSearchParams.page),
     1,
   );
+
+  const siteFilter = (firstValue(resolvedSearchParams.site) ?? "").trim();
+  const numberFilter = (firstValue(resolvedSearchParams.number) ?? "").trim();
+  const hasFilters = Boolean(siteFilter || numberFilter);
 
   let courts: CourtRow[] = [];
   let total = 0;
@@ -70,28 +81,55 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
       } else {
         const collection = db.collection("courts");
 
-        total = await collection.countDocuments();
+        const match: Record<string, unknown> = {};
+        if (siteFilter) {
+          match["site.name"] = {
+            $regex: escapeRegExp(siteFilter),
+            $options: "i",
+          };
+        }
+        if (numberFilter) {
+          const parsed = Number(numberFilter);
+          // A non-numeric court number matches nothing, rather than being
+          // quietly dropped and showing rows the filter excludes.
+          match.number = Number.isInteger(parsed) ? parsed : { $in: [] };
+        }
+
+        // Joined to sites so the list can be ordered and filtered by site
+        // name — sorting on siteId alone would order by ObjectId, which
+        // reads as arbitrary.
+        const pipeline: Record<string, unknown>[] = [
+          {
+            $lookup: {
+              from: "sites",
+              localField: "siteId",
+              foreignField: "_id",
+              as: "site",
+            },
+          },
+          {
+            $unwind: {
+              path: "$site",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          ...(Object.keys(match).length > 0 ? [{ $match: match }] : []),
+        ];
+
+        // Counted first so the page can be clamped against the filtered
+        // total; clamping afterwards would hand back an empty page whenever
+        // a filter shortens the result below the current page.
+        const counted = await collection
+          .aggregate<{ total: number }>([...pipeline, { $count: "total" }])
+          .toArray();
+        total = counted[0]?.total ?? 0;
+
         const totalPages = Math.max(1, Math.ceil(total / pageSize));
         page = Math.min(requestedPage, totalPages);
 
-        // Joined to sites so the list can be ordered by site name — sorting
-        // on siteId alone would order by ObjectId, which reads as arbitrary.
         courts = await collection
           .aggregate<CourtRow>([
-            {
-              $lookup: {
-                from: "sites",
-                localField: "siteId",
-                foreignField: "_id",
-                as: "site",
-              },
-            },
-            {
-              $unwind: {
-                path: "$site",
-                preserveNullAndEmptyArrays: true,
-              },
-            },
+            ...pipeline,
             { $sort: { "site.name": 1, number: 1 } },
             { $skip: (page - 1) * pageSize },
             { $limit: pageSize },
@@ -114,6 +152,16 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const firstRowNumber = (page - 1) * pageSize + 1;
 
+  function pageHref(targetPage: number) {
+    const params = new URLSearchParams({
+      page: String(targetPage),
+      pageSize: String(pageSize),
+    });
+    if (siteFilter) params.set("site", siteFilter);
+    if (numberFilter) params.set("number", numberFilter);
+    return `/courts?${params.toString()}`;
+  }
+
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
@@ -124,6 +172,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
             </h1>
             <p className="mt-1 text-sm text-foreground/60">
               {total} {total === 1 ? "court" : "courts"}
+              {hasFilters ? " matching" : ""}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -134,7 +183,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
 
         {errorMessage ? (
           <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
-        ) : courts.length === 0 ? (
+        ) : courts.length === 0 && !hasFilters ? (
           <p className="mt-8 text-sm text-foreground/60">No courts yet.</p>
         ) : (
           <>
@@ -146,8 +195,19 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                     <th className="px-4 py-3 font-medium">Site</th>
                     <th className="px-4 py-3 font-medium">Court No.</th>
                   </tr>
+                  <CourtFilters site={siteFilter} number={numberFilter} />
                 </thead>
                 <tbody>
+                  {courts.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-4 py-6 text-center text-sm text-foreground/60"
+                      >
+                        No courts match these filters.
+                      </td>
+                    </tr>
+                  )}
                   {courts.map((court, index) => (
                     <tr
                       key={String(court._id)}
@@ -169,18 +229,10 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                 Page {page} of {totalPages}
               </p>
               <div className="flex items-center gap-2">
-                <PageLink
-                  page={page - 1}
-                  pageSize={pageSize}
-                  disabled={page <= 1}
-                >
+                <PageLink href={pageHref(page - 1)} disabled={page <= 1}>
                   Previous
                 </PageLink>
-                <PageLink
-                  page={page + 1}
-                  pageSize={pageSize}
-                  disabled={page >= totalPages}
-                >
+                <PageLink href={pageHref(page + 1)} disabled={page >= totalPages}>
                   Next
                 </PageLink>
               </div>
@@ -193,13 +245,11 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
 }
 
 function PageLink({
-  page,
-  pageSize,
+  href,
   disabled,
   children,
 }: {
-  page: number;
-  pageSize: number;
+  href: string;
   disabled: boolean;
   children: ReactNode;
 }) {
@@ -213,7 +263,7 @@ function PageLink({
 
   return (
     <Link
-      href={`/courts?page=${page}&pageSize=${pageSize}`}
+      href={href}
       className="rounded-full border border-foreground/15 px-4 py-2 text-sm transition-colors hover:bg-foreground/10"
     >
       {children}
