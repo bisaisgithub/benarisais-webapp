@@ -15,12 +15,14 @@ new one, read those files and follow them rather than inventing a shape.
 | Edit modal | `src/components/EditSiteModal.tsx` |
 | History modal (shared, do not fork) | `src/components/HistoryModal.tsx` |
 | Page-size control (shared) | `src/components/PageSizeSelect.tsx` |
+| Column filter row (shared) | `src/components/TableFilters.tsx` |
+| Filter condition builders (shared) | `src/lib/listFilters.ts` |
 | History helpers (shared) | `src/lib/updateHistory.ts` |
 | Index setup | `src/lib/mongodb.ts` |
 | Nav links | `src/components/Navbar.tsx` |
 
-`HistoryModal`, `PageSizeSelect`, `LocalDate` and everything in
-`src/lib/updateHistory.ts` are shared. Reuse them; only the page, the two
+`HistoryModal`, `PageSizeSelect`, `TableFilters`, `LocalDate` and everything
+in `src/lib/updateHistory.ts` and `src/lib/listFilters.ts` are shared. Reuse them; only the page, the two
 endpoints and the two entity-specific modals are new per feature.
 
 ## Document shape
@@ -125,6 +127,57 @@ actorNames = await resolveActorNames(db, rows.flatMap((row) => actorIdsOf(row)))
   `"Self-registered"` as the third argument only on users, who have no
   creating admin.
 
+## Filtering
+
+Every list carries a filter row under its headers — one search box per
+filterable column, the way a spreadsheet filters a column.
+
+**Filter in the query, never in the browser.** A client-side filter can only
+narrow the rows already fetched, so it silently disagrees with the row count
+and misses everything on page two. Feed the filters into the same
+`countDocuments`/`find` (or `$match`, where the page aggregates) that drives
+the page:
+
+```tsx
+const filters = { name: filterValue(resolvedSearchParams.name) };
+const hasFilters = Object.values(filters).some(Boolean);
+
+const filter: Record<string, unknown> = {};
+if (filters.name) filter.name = textCondition(filters.name);
+
+total = await collection.countDocuments(filter);          // filtered count
+const totalPages = Math.max(1, Math.ceil(total / pageSize));
+page = Math.min(requestedPage, totalPages);               // clamp after
+```
+
+Count **before** clamping the page. Clamping first hands back an empty page
+whenever a filter shortens the result below the reader's current page.
+
+`src/lib/listFilters.ts` has the condition builders: `textCondition` for a
+case-insensitive substring, `numberCondition` for an exact number,
+`timeCondition` for times stored as minutes. Each returns `MATCHES_NOTHING`
+for input it cannot read, rather than dropping the filter — showing rows the
+reader believes they excluded is worse than an empty table they can see.
+
+A filter over a referenced collection resolves through it first: the users
+page turns a typed type name into ids, then matches `types: { $in: ids }`.
+
+On the page:
+
+- Render `<TableFilters basePath="/route" columns={…} values={filters} />` as
+  a second `<tr>` in `<thead>`. `columns` lists every column **after** No., in
+  order, with `null` for ones that are not filterable — derived values and
+  Actions — so the row stays aligned with the headers.
+- Keep the table rendered when a filter matches nothing, with a message row in
+  the `<tbody>`. Hiding the table takes the filter row with it and leaves no
+  way to undo the filter. Only fall back to "No X yet." when there are no
+  filters at all.
+- Pagination links must carry the filters, or paging silently clears them. Use
+  a `pageHref(targetPage)` helper rather than a hardcoded query string.
+
+`TableFilters` keeps values in the URL, debounces typing into one request per
+word, and drops the `page` param on every change.
+
 ## Modals
 
 Modals are portalled to `document.body` at `z-[60]`; `HistoryModal` sits at
@@ -161,6 +214,8 @@ the existing pill classes, so it appears in the mobile panel too.
 - Each validation and duplicate path returns the status and message intended.
 - The modal drives correctly in a browser: add, edit, cancel, duplicate error,
   and the history modal opening from a row.
+- Filters narrow the count and the page count, survive paging, and the filter
+  row has exactly as many cells as the header has columns.
 
 There is no MongoDB in the Claude Code web sandbox and its network policy
 blocks one being fetched, so the database paths cannot be exercised there.

@@ -2,10 +2,15 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import AddCourtsModal from "@/components/AddCourtsModal";
-import CourtFilters from "@/components/CourtFilters";
+import TableFilters from "@/components/TableFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
+import {
+  filterValue,
+  numberCondition,
+  textCondition,
+} from "@/lib/listFilters";
 import { getMongoClient } from "@/lib/mongodb";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -32,9 +37,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 
 
@@ -54,8 +56,8 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
     1,
   );
 
-  const siteFilter = (firstValue(resolvedSearchParams.site) ?? "").trim();
-  const numberFilter = (firstValue(resolvedSearchParams.number) ?? "").trim();
+  const siteFilter = filterValue(resolvedSearchParams.site);
+  const numberFilter = filterValue(resolvedSearchParams.number);
   const hasFilters = Boolean(siteFilter || numberFilter);
 
   let courts: CourtRow[] = [];
@@ -83,16 +85,10 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
 
         const match: Record<string, unknown> = {};
         if (siteFilter) {
-          match["site.name"] = {
-            $regex: escapeRegExp(siteFilter),
-            $options: "i",
-          };
+          match["site.name"] = textCondition(siteFilter);
         }
         if (numberFilter) {
-          const parsed = Number(numberFilter);
-          // A non-numeric court number matches nothing, rather than being
-          // quietly dropped and showing rows the filter excludes.
-          match.number = Number.isInteger(parsed) ? parsed : { $in: [] };
+          match.number = numberCondition(numberFilter);
         }
 
         // Joined to sites so the list can be ordered and filtered by site
@@ -195,7 +191,14 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                     <th className="px-4 py-3 font-medium">Site</th>
                     <th className="px-4 py-3 font-medium">Court No.</th>
                   </tr>
-                  <CourtFilters site={siteFilter} number={numberFilter} />
+                  <TableFilters
+                    basePath="/courts"
+                    columns={[
+                      { key: "site", label: "site", placeholder: "Search site…" },
+                      { key: "number", label: "court number", placeholder: "Court no…" },
+                    ]}
+                    values={{ site: siteFilter, number: numberFilter }}
+                  />
                 </thead>
                 <tbody>
                   {courts.length === 0 && (

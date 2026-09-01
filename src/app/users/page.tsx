@@ -5,9 +5,14 @@ import EditUserModal from "@/components/EditUserModal";
 import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
 import PageSizeSelect from "@/components/PageSizeSelect";
+import TableFilters from "@/components/TableFilters";
 import TypesModal from "@/components/TypesModal";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
+import {
+  filterValue,
+  textCondition,
+} from "@/lib/listFilters";
 import { getMongoClient } from "@/lib/mongodb";
 import {
   actorIdsOf,
@@ -66,6 +71,15 @@ export default async function UsersPage(props: PageProps<"/users">) {
     1,
   );
 
+  const filters = {
+    name: filterValue(resolvedSearchParams.name),
+    email: filterValue(resolvedSearchParams.email),
+    contact: filterValue(resolvedSearchParams.contact),
+    message: filterValue(resolvedSearchParams.message),
+    type: filterValue(resolvedSearchParams.type),
+  };
+  const hasFilters = Object.values(filters).some(Boolean);
+
   let users: (UserRecord & { _id: unknown })[] = [];
   let userTypes: (UserTypeRecord & { _id: unknown })[] = [];
   let actorNames = new Map<string, string>();
@@ -91,12 +105,30 @@ export default async function UsersPage(props: PageProps<"/users">) {
       } else {
         const collection = db.collection<UserRecord>("users");
 
-        total = await collection.countDocuments();
+        const filter: Record<string, unknown> = {};
+        for (const field of ["name", "email", "contact", "message"] as const) {
+          if (filters[field]) {
+            filter[field] = textCondition(filters[field]);
+          }
+        }
+        if (filters.type) {
+          // types holds ids, so resolve the typed text to ids first. No
+          // match leaves an empty $in, which correctly matches no user.
+          const matchingTypes = await db
+            .collection<UserTypeRecord>("user-types")
+            .find({ text: textCondition(filters.type) })
+            .toArray();
+          filter.types = { $in: matchingTypes.map((type) => type._id) };
+        }
+
+        // Counted with the filter applied, so the page count and the page
+        // clamp below both describe the filtered result.
+        total = await collection.countDocuments(filter);
         const totalPages = Math.max(1, Math.ceil(total / pageSize));
         page = Math.min(requestedPage, totalPages);
 
         users = await collection
-          .find()
+          .find(filter)
           .sort({ createdAt: -1 })
           .skip((page - 1) * pageSize)
           .limit(pageSize)
@@ -130,6 +162,17 @@ export default async function UsersPage(props: PageProps<"/users">) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const firstRowNumber = (page - 1) * pageSize + 1;
 
+  function pageHref(targetPage: number) {
+    const params = new URLSearchParams({
+      page: String(targetPage),
+      pageSize: String(pageSize),
+    });
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    return `/users?${params.toString()}`;
+  }
+
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
@@ -140,6 +183,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
             </h1>
             <p className="mt-1 text-sm text-foreground/60">
               {total} {total === 1 ? "registration" : "registrations"}
+              {hasFilters ? " matching" : ""}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -150,7 +194,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
 
         {errorMessage ? (
           <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
-        ) : users.length === 0 ? (
+        ) : users.length === 0 && !hasFilters ? (
           <p className="mt-8 text-sm text-foreground/60">
             No registrations yet.
           </p>
@@ -169,8 +213,31 @@ export default async function UsersPage(props: PageProps<"/users">) {
                     <th className="px-4 py-3 font-medium">Registered</th>
                     <th className="px-4 py-3 font-medium">Actions</th>
                   </tr>
+                  <TableFilters
+                    basePath="/users"
+                    columns={[
+                      { key: "name", label: "name", placeholder: "Search name…" },
+                      { key: "email", label: "email", placeholder: "Search email…" },
+                      { key: "contact", label: "contact", placeholder: "Search contact…" },
+                      { key: "message", label: "message", placeholder: "Search message…" },
+                      { key: "type", label: "type", placeholder: "Search type…" },
+                      null,
+                      null,
+                    ]}
+                    values={filters}
+                  />
                 </thead>
                 <tbody>
+                  {users.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-4 py-6 text-center text-sm text-foreground/60"
+                      >
+                        No registrations match these filters.
+                      </td>
+                    </tr>
+                  )}
                   {users.map((user, index) => {
                     const id = String(user._id);
                     const typeIds = (user.types ?? []).map((typeId) =>
@@ -254,18 +321,10 @@ export default async function UsersPage(props: PageProps<"/users">) {
                 Page {page} of {totalPages}
               </p>
               <div className="flex items-center gap-2">
-                <PageLink
-                  page={page - 1}
-                  pageSize={pageSize}
-                  disabled={page <= 1}
-                >
+                <PageLink href={pageHref(page - 1)} disabled={page <= 1}>
                   Previous
                 </PageLink>
-                <PageLink
-                  page={page + 1}
-                  pageSize={pageSize}
-                  disabled={page >= totalPages}
-                >
+                <PageLink href={pageHref(page + 1)} disabled={page >= totalPages}>
                   Next
                 </PageLink>
               </div>
@@ -278,13 +337,11 @@ export default async function UsersPage(props: PageProps<"/users">) {
 }
 
 function PageLink({
-  page,
-  pageSize,
+  href,
   disabled,
   children,
 }: {
-  page: number;
-  pageSize: number;
+  href: string;
   disabled: boolean;
   children: ReactNode;
 }) {
@@ -298,7 +355,7 @@ function PageLink({
 
   return (
     <Link
-      href={`/users?page=${page}&pageSize=${pageSize}`}
+      href={href}
       className="rounded-full border border-foreground/15 px-4 py-2 text-sm transition-colors hover:bg-foreground/10"
     >
       {children}
