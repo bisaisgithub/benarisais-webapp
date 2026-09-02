@@ -6,7 +6,12 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 export interface CourtSummary {
   id: string;
   label: string;
-  availability: { day: string; times: string; interval: string }[];
+  availability: {
+    day: string;
+    dayLabel: string;
+    times: string;
+    interval: string;
+  }[];
 }
 
 interface CourtSelectionContextValue {

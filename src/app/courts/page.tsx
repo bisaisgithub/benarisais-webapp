@@ -203,7 +203,8 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
       id: String(court._id),
       label: `${court.siteName ?? "Court"} ${court.number}`,
       availability: (court.availabilityTimes ?? []).map((entry) => ({
-        day: weekdayShort(entry.day),
+        day: entry.day,
+        dayLabel: weekdayShort(entry.day),
         times:
           entry.times
             .map((timeId) => rangeById.get(String(timeId)))
@@ -320,7 +321,7 @@ export default async function CourtsPage(props: PageProps<"/courts">) {
                                 className="whitespace-nowrap text-xs"
                               >
                                 <span className="font-medium text-foreground">
-                                  {entry.day}
+                                  {entry.dayLabel}
                                 </span>{" "}
                                 {entry.times}{" "}
                                 <span className="text-foreground/40">

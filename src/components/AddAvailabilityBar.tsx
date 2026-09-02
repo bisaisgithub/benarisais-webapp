@@ -35,9 +35,11 @@ interface TimeRangeOption extends RangeLike {
  * Appears once rows are ticked, and applies one set of availability times to
  * all of them at once.
  *
- * "Save", not "Add": each write replaces the selected courts' availability
- * outright, and a label promising to add would misdescribe what the button
- * does the moment a court already has some.
+ * "Save", not "Add": each write replaces what it touches rather than adding
+ * to it, and a label promising to add would misdescribe that.
+ *
+ * Replacement is per day, so a court can be built up a day at a time: saving
+ * Sunday rewrites Sunday and leaves the other days alone.
  */
 export default function AddAvailabilityBar() {
   const router = useRouter();
@@ -213,9 +215,9 @@ export default function AddAvailabilityBar() {
                 </div>
 
                 <p className="mt-2 text-sm text-foreground/60">
-                  Replaces the availability on the {selected.length}{" "}
+                  Replaces only the days you pick, on the {selected.length}{" "}
                   {selected.length === 1 ? "selected court" : "selected courts"}
-                  .
+                  . Other days are left as they are.
                 </p>
 
                 <CurrentAvailability courts={selectedCourts} />
@@ -226,6 +228,13 @@ export default function AddAvailabilityBar() {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {WEEKDAYS.map((day) => {
                         const on = days.includes(day);
+                        // Picking a day that already has times overwrites it,
+                        // so the button says which days those are.
+                        const held = selectedCourts.filter((court) =>
+                          court.availability.some(
+                            (entry) => entry.day === day,
+                          ),
+                        ).length;
                         return (
                           <button
                             key={day}
@@ -238,7 +247,16 @@ export default function AddAvailabilityBar() {
                               )
                             }
                             aria-pressed={on}
-                            aria-label={weekdayLabel(day)}
+                            aria-label={
+                              held > 0
+                                ? `${weekdayLabel(day)} (${held} of the selected courts already set)`
+                                : weekdayLabel(day)
+                            }
+                            title={
+                              held > 0
+                                ? `${held} of the selected courts already have ${weekdayLabel(day)} availability — saving overwrites it`
+                                : undefined
+                            }
                             className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                               on
                                 ? "border-accent bg-accent text-background"
@@ -246,6 +264,14 @@ export default function AddAvailabilityBar() {
                             }`}
                           >
                             {weekdayShort(day)}
+                            {held > 0 && (
+                              <span
+                                aria-hidden="true"
+                                className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
+                                  on ? "bg-background/70" : "bg-accent"
+                                }`}
+                              />
+                            )}
                           </button>
                         );
                       })}
@@ -359,7 +385,9 @@ export default function AddAvailabilityBar() {
                       Will save:{" "}
                       <span className="font-medium text-foreground">
                         {chosenRanges.length === 0
-                          ? "no availability"
+                          ? orderedDays.length === 0
+                            ? "nothing — pick days and times"
+                            : `clears ${orderedDays.map(weekdayShort).join(", ")}`
                           : orderedDays.length === 0
                             ? "pick at least one day"
                             : `${orderedDays.map(weekdayShort).join(", ")} · ${chosenRanges
@@ -372,8 +400,8 @@ export default function AddAvailabilityBar() {
                       !misfit && (
                         <p className="mt-1 text-xs text-foreground/50">
                           {totalSlots} bookable{" "}
-                          {totalSlots === 1 ? "slot" : "slots"} per day · saved
-                          Sunday first, times ascending.
+                          {totalSlots === 1 ? "slot" : "slots"} on each of those
+                          days · other days unchanged.
                         </p>
                       )}
                   </div>
@@ -439,7 +467,7 @@ function describe(court: CourtSummary): string {
     return "none";
   }
   return court.availability
-    .map((entry) => `${entry.day} ${entry.times} @ ${entry.interval}`)
+    .map((entry) => `${entry.dayLabel} ${entry.times} @ ${entry.interval}`)
     .join(" · ");
 }
 

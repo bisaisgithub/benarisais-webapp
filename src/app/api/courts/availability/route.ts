@@ -61,13 +61,18 @@ function readIds(value: unknown, max: number): string[] | null {
 }
 
 /**
- * Sets the availability of one or more courts, in one write: the chosen time
- * ranges and booking interval are applied to each chosen day of the week.
+ * Sets the availability of one or more courts: the chosen time ranges and
+ * booking interval are applied to each chosen day of the week.
  *
- * This replaces each selected court's availability rather than adding to it:
- * merging would give every court a different result depending on what it
- * already had, and could produce the overlaps this endpoint exists to
- * prevent.
+ * Replacement is per day. Saving Sunday rewrites Sunday and leaves every
+ * other day alone, so a court can be built up a day at a time with different
+ * times and intervals on each. Saving a day with no times clears that day.
+ *
+ * That makes this a read-merge-write per court rather than one blanket $set,
+ * since each court's other days are its own. Two admins saving different
+ * days of the same court at the same moment could still lose one of the two
+ * writes; for an admin tool that is a fair trade for keeping the merge
+ * readable.
  */
 export async function POST(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);
@@ -194,54 +199,65 @@ export async function POST(request: NextRequest) {
 
     const courtObjectIds = courts.map((id) => new ObjectId(id));
     const collection = db.collection<CourtDocument>("courts");
-    const matching = await collection.countDocuments({
-      _id: { $in: courtObjectIds },
-    });
-    if (matching !== courtObjectIds.length) {
+    const existing = await collection
+      .find({ _id: { $in: courtObjectIds } })
+      .toArray();
+
+    if (existing.length !== courtObjectIds.length) {
       return NextResponse.json(
         { error: "One of those courts no longer exists." },
         { status: 404 },
       );
     }
 
-    // Days Monday-first, times ascending within each — so anything reading a
-    // court's availability gets it in order without having to sort.
+    // Times ascending within a day; days ordered by WEEKDAYS after merging,
+    // so anything reading a court's availability gets it in order.
     const times = sorted.map((range) => range._id);
-    const availabilityTimes: AvailabilityEntry[] = sortWeekdays(
-      chosenDays.map((day) => ({
-        day,
-        times,
-        interval: numericInterval,
-      })),
-    );
+    const replacedDays = new Set<Weekday>(chosenDays);
+    const newEntries: AvailabilityEntry[] =
+      times.length === 0
+        ? []
+        : chosenDays.map((day) => ({ day, times, interval: numericInterval }));
 
     const rangeLabels = sorted.map(
       (range) =>
         `${formatTime(range.startMinutes)} – ${formatTime(range.endMinutes)}`,
     );
-    const labels =
+    const labels = chosenDays.map((day) =>
       rangeLabels.length === 0
-        ? "none"
-        : availabilityTimes.map(
-            (entry) =>
-              `${weekdayLabel(entry.day)}: ${rangeLabels.join(", ")} @ ${formatInterval(entry.interval)}`,
-          );
-
-    const result = await collection.updateMany(
-      { _id: { $in: courtObjectIds } },
-      {
-        // No times chosen means no availability at all, rather than a set of
-        // days each holding an empty list.
-        $set: { availabilityTimes: times.length === 0 ? [] : availabilityTimes },
-        $push: pushUpdateHistory(authCheck.userId, {
-          availabilityTimes: labels,
-        }),
-      },
+        ? `${weekdayLabel(day)}: cleared`
+        : `${weekdayLabel(day)}: ${rangeLabels.join(", ")} @ ${formatInterval(numericInterval)}`,
     );
+
+    const operations = existing.map((court) => {
+      const kept = (court.availabilityTimes ?? []).filter(
+        // isWeekday also drops anything left by an earlier shape of this
+        // field, rather than carrying it forward unsorted.
+        (entry) => isWeekday(entry.day) && !replacedDays.has(entry.day),
+      );
+
+      return {
+        updateOne: {
+          filter: { _id: court._id },
+          update: {
+            $set: {
+              availabilityTimes: sortWeekdays([...kept, ...newEntries]),
+            },
+            $push: pushUpdateHistory(authCheck.userId, {
+              availabilityTimes: labels,
+            }),
+          },
+        },
+      };
+    });
+
+    const result = await collection.bulkWrite(operations);
 
     return NextResponse.json({
       updated: result.modifiedCount,
-      days: availabilityTimes.map((entry) => entry.day),
+      days: sortWeekdays(chosenDays.map((day) => ({ day }))).map(
+        (entry) => entry.day,
+      ),
       times: rangeLabels,
       interval: numericInterval,
     });
