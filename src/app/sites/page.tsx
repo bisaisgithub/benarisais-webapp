@@ -7,6 +7,7 @@ import HistoryModal from "@/components/HistoryModal";
 import LocalDate from "@/components/LocalDate";
 import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
+import SessionRecovery from "@/components/SessionRecovery";
 import TableSearch from "@/components/TableSearch";
 import ColumnFilter from "@/components/ColumnFilter";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
@@ -76,6 +77,8 @@ export default async function SitesPage(props: PageProps<"/sites">) {
   let total = 0;
   let page = requestedPage;
   let errorMessage: string | null = null;
+  // True only when the access token itself failed, which a refresh can fix.
+  let sessionExpired = false;
 
   const authCheck = getAuthenticatedUserIdFromToken(
     getAccessTokenFromCookieStore(await cookies()),
@@ -83,6 +86,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
 
   if ("error" in authCheck) {
     errorMessage = ADMIN_ACCESS_REQUIRED_MESSAGE;
+    sessionExpired = true;
   } else {
     try {
       const client = await getMongoClient();
@@ -162,7 +166,10 @@ export default async function SitesPage(props: PageProps<"/sites">) {
         </div>
 
         {errorMessage ? (
-          <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
+          <>
+            <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
+            {sessionExpired && <SessionRecovery />}
+          </>
         ) : (
           <>
             <ListFilters basePath="/sites" initial={{ q: search, name: nameFilter }}>

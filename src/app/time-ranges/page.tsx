@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import HistoryModal from "@/components/HistoryModal";
 import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
+import SessionRecovery from "@/components/SessionRecovery";
 import TableSearch from "@/components/TableSearch";
 import ColumnFilter from "@/components/ColumnFilter";
 import TimeRangeModal from "@/components/TimeRangeModal";
@@ -99,6 +100,8 @@ export default async function TimeRangesPage(
   let total = 0;
   let page = requestedPage;
   let errorMessage: string | null = null;
+  // True only when the access token itself failed, which a refresh can fix.
+  let sessionExpired = false;
 
   const authCheck = getAuthenticatedUserIdFromToken(
     getAccessTokenFromCookieStore(await cookies()),
@@ -106,6 +109,7 @@ export default async function TimeRangesPage(
 
   if ("error" in authCheck) {
     errorMessage = ADMIN_ACCESS_REQUIRED_MESSAGE;
+    sessionExpired = true;
   } else {
     try {
       const client = await getMongoClient();
@@ -200,7 +204,10 @@ export default async function TimeRangesPage(
         </div>
 
         {errorMessage ? (
-          <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
+          <>
+            <p className="mt-8 text-sm text-red-500">{errorMessage}</p>
+            {sessionExpired && <SessionRecovery />}
+          </>
         ) : ranges.length === 0 && !hasFilters ? (
           <p className="mt-8 text-sm text-foreground/60">No time ranges yet.</p>
         ) : (

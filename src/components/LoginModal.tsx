@@ -19,6 +19,11 @@ import {
   type AuthUser,
 } from "@/lib/authClient";
 
+/** Comfortably inside the fifteen-minute access token lifetime. */
+const REFRESH_EVERY_MS = 10 * 60 * 1000;
+/** Focus and visibility can both fire at once; one renewal is enough. */
+const MIN_REFRESH_GAP_MS = 30 * 1000;
+
 export default function LoginModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [identifier, setIdentifier] = useState("");
@@ -43,7 +48,33 @@ export default function LoginModal() {
   }, [storedUserJson]);
 
   useEffect(() => {
-    refreshSession();
+    // The access token lives fifteen minutes and pages are server-rendered
+    // from it, so a session left open longer than that would render as
+    // signed out. Renewing well inside the window keeps that from
+    // happening; SessionRecovery handles the cases this still misses, such
+    // as a laptop resumed from sleep.
+    let last = 0;
+    function renew() {
+      if (Date.now() - last < MIN_REFRESH_GAP_MS) return;
+      last = Date.now();
+      refreshSession();
+    }
+
+    renew();
+    const timer = setInterval(renew, REFRESH_EVERY_MS);
+
+    // A tab that was in the background may have missed several intervals.
+    function onVisible() {
+      if (document.visibilityState === "visible") renew();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, []);
 
   function openModal() {
