@@ -1,5 +1,6 @@
 import Link from "next/link";
 import LoginModal from "@/components/LoginModal";
+import NavLinkPending from "@/components/NavLinkPending";
 import MobileMenu from "@/components/MobileMenu";
 import RegisterModal from "@/components/RegisterModal";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -20,24 +21,28 @@ export default function Navbar() {
               className="rounded-full border border-foreground/15 px-4 py-2 text-center text-sm font-medium transition-colors hover:bg-foreground/10 sm:px-5 sm:text-base"
             >
               Users
+              <NavLinkPending />
             </Link>
             <Link
               href="/sites"
               className="rounded-full border border-foreground/15 px-4 py-2 text-center text-sm font-medium transition-colors hover:bg-foreground/10 sm:px-5 sm:text-base"
             >
               Sites
+              <NavLinkPending />
             </Link>
             <Link
               href="/courts"
               className="rounded-full border border-foreground/15 px-4 py-2 text-center text-sm font-medium transition-colors hover:bg-foreground/10 sm:px-5 sm:text-base"
             >
               Courts
+              <NavLinkPending />
             </Link>
             <Link
               href="/time-ranges"
               className="rounded-full border border-foreground/15 px-4 py-2 text-center text-sm font-medium transition-colors hover:bg-foreground/10 sm:px-5 sm:text-base"
             >
               Time Ranges
+              <NavLinkPending />
             </Link>
             <RegisterModal />
             <LoginModal />
