@@ -9,10 +9,12 @@ import ListFilters from "@/components/ListFilters";
 import PageSizeSelect from "@/components/PageSizeSelect";
 import SessionRecovery from "@/components/SessionRecovery";
 import TableSearch from "@/components/TableSearch";
+import TypesModal from "@/components/TypesModal";
 import ColumnFilter from "@/components/ColumnFilter";
 import { getAccessTokenFromCookieStore } from "@/lib/authCookies";
 import { getAuthenticatedUserIdFromToken, isAdmin } from "@/lib/authz";
 import { filterValue, textCondition } from "@/lib/listFilters";
+import { ObjectId } from "mongodb";
 import { getMongoClient } from "@/lib/mongodb";
 import {
   actorIdsOf,
@@ -30,10 +32,13 @@ const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
 /** Filterable columns, in table order. The key is also the URL parameter. */
 const SITE_FILTER_COLUMNS = [
   { heading: "Name", column: { key: "name", label: "name", placeholder: "Search name…" } },
+  { heading: "Type", column: { key: "type", label: "type", placeholder: "Search type…" } },
 ] as const;
 
 interface SiteRecord {
   name: string;
+  /** Reference into siteTypes; absent on sites saved before types existed. */
+  type?: unknown;
   createdAt?: Date;
   createdBy?: unknown;
   updateHistory?: UpdateHistoryEntry[];
@@ -70,10 +75,12 @@ export default async function SitesPage(props: PageProps<"/sites">) {
 
   const search = filterValue(resolvedSearchParams.q);
   const nameFilter = filterValue(resolvedSearchParams.name);
-  const hasFilters = Boolean(search || nameFilter);
+  const typeFilter = filterValue(resolvedSearchParams.type);
+  const hasFilters = Boolean(search || nameFilter || typeFilter);
 
   let sites: (SiteRecord & { _id: unknown })[] = [];
   let actorNames = new Map<string, string>();
+  let siteTypes: { _id: string; text: string }[] = [];
   let total = 0;
   let page = requestedPage;
   let errorMessage: string | null = null;
@@ -99,14 +106,46 @@ export default async function SitesPage(props: PageProps<"/sites">) {
       } else {
         const collection = db.collection<SiteRecord>("sites");
 
+        siteTypes = (
+          await db
+            .collection<{ text: string }>("siteTypes")
+            .find()
+            .sort({ text: 1 })
+            .toArray()
+        ).map((siteType) => ({
+          _id: siteType._id.toString(),
+          text: siteType.text,
+        }));
+
         const filter: Record<string, unknown> = {};
         if (nameFilter) {
           filter.name = textCondition(nameFilter);
         }
+        if (typeFilter) {
+          // The column holds a reference, so the typed text is resolved to
+          // ids first. No match leaves an empty $in, which correctly returns
+          // no sites rather than every site.
+          filter.type = {
+            $in: siteTypes
+              .filter((siteType) =>
+                siteType.text.toLowerCase().includes(typeFilter.toLowerCase()),
+              )
+              .map((siteType) => new ObjectId(siteType._id)),
+          };
+        }
         if (search) {
-          // Name is the only field a site carries, so searching all fields
-          // and filtering the column agree — they still combine as an AND.
-          filter.$or = [{ name: textCondition(search) }];
+          filter.$or = [
+            { name: textCondition(search) },
+            {
+              type: {
+                $in: siteTypes
+                  .filter((siteType) =>
+                    siteType.text.toLowerCase().includes(search.toLowerCase()),
+                  )
+                  .map((siteType) => new ObjectId(siteType._id)),
+              },
+            },
+          ];
         }
 
         // Counted with the filter applied, so the page count and the page
@@ -135,6 +174,9 @@ export default async function SitesPage(props: PageProps<"/sites">) {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const firstRowNumber = (page - 1) * pageSize + 1;
+  const typeTextById = new Map(
+    siteTypes.map((siteType) => [siteType._id, siteType.text]),
+  );
 
   function pageHref(targetPage: number) {
     const params = new URLSearchParams({
@@ -143,6 +185,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
     });
     if (search) params.set("q", search);
     if (nameFilter) params.set("name", nameFilter);
+    if (typeFilter) params.set("type", typeFilter);
     return `/sites?${params.toString()}`;
   }
 
@@ -160,7 +203,15 @@ export default async function SitesPage(props: PageProps<"/sites">) {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {!errorMessage && <AddSiteModal />}
+            {!errorMessage && (
+              <>
+                <TypesModal
+                  endpoint="/api/sites/types"
+                  title="Site Types"
+                />
+                <AddSiteModal availableTypes={siteTypes} />
+              </>
+            )}
             <PageSizeSelect pageSize={pageSize} basePath="/sites" />
           </div>
         </div>
@@ -172,7 +223,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
           </>
         ) : (
           <>
-            <ListFilters basePath="/sites" initial={{ q: search, name: nameFilter }}>
+            <ListFilters basePath="/sites" initial={{ q: search, name: nameFilter, type: typeFilter }}>
             {sites.length === 0 && !hasFilters ? (
               <p className="mt-8 text-sm text-foreground/60">No sites yet.</p>
             ) : (
@@ -180,7 +231,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                 <TableSearch />
 
                 <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
-                  <table className="w-full min-w-[520px] text-left text-sm">
+                  <table className="w-full min-w-[620px] text-left text-sm">
                     <thead className="border-b border-foreground/10 bg-foreground/5">
                       <tr>
                         <th className="px-4 py-3 font-medium">No.</th>
@@ -201,7 +252,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                       {sites.length === 0 && (
                         <tr>
                           <td
-                            colSpan={4}
+                            colSpan={5}
                             className="px-4 py-6 text-center text-sm text-foreground/60"
                           >
                             No sites match these filters.
@@ -220,6 +271,11 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                               {firstRowNumber + index}
                             </td>
                             <td className="px-4 py-3">{site.name}</td>
+                            <td className="px-4 py-3">
+                              {typeTextById.get(String(site.type)) ?? (
+                                <span className="text-foreground/40">—</span>
+                              )}
+                            </td>
                             <td className="whitespace-nowrap px-4 py-3 text-foreground/60">
                               {site.createdAt ? (
                                 <LocalDate
@@ -231,7 +287,12 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
-                                <EditSiteModal id={id} name={site.name} />
+                                <EditSiteModal
+                                  id={id}
+                                  name={site.name}
+                                  type={site.type ? String(site.type) : ""}
+                                  availableTypes={siteTypes}
+                                />
                                 <HistoryModal
                                   title={site.name}
                                   createdByName={actorName(

@@ -1,5 +1,5 @@
 import ListPageSkeleton from "@/components/ListPageSkeleton";
 
 export default function Loading() {
-  return <ListPageSkeleton title="Sites" columns={4} />;
+  return <ListPageSkeleton title="Sites" columns={5} />;
 }

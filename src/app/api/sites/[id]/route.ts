@@ -2,16 +2,19 @@ import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureSiteIndexes, getMongoClient } from "@/lib/mongodb";
+import { readSiteType, siteTypeNames } from "@/lib/siteTypes";
 import {
   diffChanges,
   pushUpdateHistory,
   type UpdateHistoryEntry,
 } from "@/lib/updateHistory";
 
+
 const COLLECTION_NAME = "sites";
 
 interface SiteDocument {
   name: string;
+  type?: ObjectId | null;
   createdAt: Date;
   createdBy: ObjectId | null;
   updateHistory: UpdateHistoryEntry[];
@@ -73,7 +76,7 @@ export async function PUT(
       );
     }
 
-    const { name } = body as Record<string, unknown>;
+    const { name, type } = body as Record<string, unknown>;
     const trimmedName = typeof name === "string" ? name.trim() : "";
 
     if (!trimmedName) {
@@ -81,6 +84,11 @@ export async function PUT(
         { error: "Site name is required." },
         { status: 400 },
       );
+    }
+
+    const parsedType = await readSiteType(db, type);
+    if ("error" in parsedType) {
+      return NextResponse.json({ error: parsedType.error }, { status: 400 });
     }
 
     await ensureSiteIndexes();
@@ -104,13 +112,19 @@ export async function PUT(
       return NextResponse.json({ error: "Site not found." }, { status: 404 });
     }
 
+    // History records the type's name, not its id, so an edit stays
+    // readable after the type is renamed.
+    const typeNames = await siteTypeNames(db, [current.type, parsedType.type]);
+    const typeLabel = (id: ObjectId | null | undefined) =>
+      id ? (typeNames.get(id.toString()) ?? "unknown") : "none";
+
     const changes = diffChanges(
-      { name: current.name },
-      { name: trimmedName },
+      { name: current.name, type: typeLabel(current.type) },
+      { name: trimmedName, type: typeLabel(parsedType.type) },
     );
 
     const result = await collection.updateOne({ _id: objectId }, {
-      $set: { name: trimmedName },
+      $set: { name: trimmedName, type: parsedType.type },
       // Skipped when nothing moved, so a no-op save can't push real edits
       // out of the capped history.
       ...(Object.keys(changes).length > 0

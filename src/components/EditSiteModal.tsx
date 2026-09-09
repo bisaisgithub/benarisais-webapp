@@ -7,21 +7,27 @@ import { createPortal } from "react-dom";
 interface EditSiteModalProps {
   id: string;
   name: string;
+  type: string;
+  availableTypes: { _id: string; text: string }[];
 }
 
 export default function EditSiteModal({
   id,
   name: initialName,
+  type: initialType,
+  availableTypes,
 }: EditSiteModalProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState(initialName);
+  const [type, setType] = useState(initialType);
   const [nameError, setNameError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   function openModal() {
     setName(initialName);
+    setType(initialType);
     setNameError(null);
     setSubmitError(null);
     setIsOpen(true);
@@ -50,7 +56,7 @@ export default function EditSiteModal({
       const response = await fetch(`/api/sites/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: name.trim(), type: type || null }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
@@ -135,6 +141,28 @@ export default function EditSiteModal({
                     {nameError && (
                       <p className="mt-1 text-xs text-red-500">{nameError}</p>
                     )}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor={`edit-site-type-${id}`}
+                      className="block text-sm font-medium"
+                    >
+                      Type
+                    </label>
+                    <select
+                      id={`edit-site-type-${id}`}
+                      value={type}
+                      onChange={(event) => setType(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                    >
+                      <option value="">No type</option>
+                      {availableTypes.map((option) => (
+                        <option key={option._id} value={option._id}>
+                          {option.text}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {submitError && (

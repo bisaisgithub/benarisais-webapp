@@ -221,7 +221,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <TypesModal />
+            <TypesModal endpoint="/api/users/types" title="User Types" />
             <PageSizeSelect pageSize={pageSize} />
           </div>
         </div>

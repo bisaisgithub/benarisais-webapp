@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import HistoryModal from "@/components/HistoryModal";
 import type { UpdateHistoryView } from "@/lib/updateHistory";
 
-interface UserType {
+interface NamedType {
   _id: string;
   text: string;
   createdByName: string;
@@ -13,9 +13,21 @@ interface UserType {
   history: UpdateHistoryView[];
 }
 
-export default function TypesModal() {
+interface TypesModalProps {
+  /** The collection endpoint this manages, e.g. "/api/sites/types". */
+  endpoint: string;
+  /** Heading inside the dialog, e.g. "Site Types". */
+  title: string;
+}
+
+/**
+ * Manages a small list of named types — the same list-and-rename dialog for
+ * user types and site types, told which endpoint it speaks to. One copy,
+ * because two would drift the moment either grew a field.
+ */
+export default function TypesModal({ endpoint, title }: TypesModalProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [types, setTypes] = useState<UserType[]>([]);
+  const [types, setTypes] = useState<NamedType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -38,7 +50,7 @@ export default function TypesModal() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch("/api/users/types");
+      const response = await fetch(endpoint);
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(data?.error || "Could not load types.");
@@ -81,7 +93,7 @@ export default function TypesModal() {
     setIsAdding(true);
     setAddError(null);
     try {
-      const response = await fetch("/api/users/types", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: trimmedQuery }),
@@ -91,7 +103,7 @@ export default function TypesModal() {
         throw new Error(data?.error || "Could not add type.");
       }
       setTypes((current) =>
-        [...current, data as UserType].sort((a, b) =>
+        [...current, data as NamedType].sort((a, b) =>
           a.text.localeCompare(b.text),
         ),
       );
@@ -105,7 +117,7 @@ export default function TypesModal() {
     }
   }
 
-  function startEdit(type: UserType) {
+  function startEdit(type: NamedType) {
     setEditingId(type._id);
     setEditingText(type.text);
     setEditError(null);
@@ -124,7 +136,7 @@ export default function TypesModal() {
     setIsSavingEdit(true);
     setEditError(null);
     try {
-      const response = await fetch("/api/users/types", {
+      const response = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: editingId, text: trimmedEditingText }),
@@ -135,7 +147,7 @@ export default function TypesModal() {
       }
       setTypes((current) =>
         current
-          .map((type) => (type._id === editingId ? (data as UserType) : type))
+          .map((type) => (type._id === editingId ? (data as NamedType) : type))
           .sort((a, b) => a.text.localeCompare(b.text)),
       );
       cancelEdit();
@@ -178,7 +190,7 @@ export default function TypesModal() {
                     id="types-modal-title"
                     className="text-lg font-semibold tracking-tight sm:text-xl"
                   >
-                    User Types
+                    {title}
                   </h2>
                   <button
                     type="button"

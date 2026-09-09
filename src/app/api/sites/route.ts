@@ -2,12 +2,15 @@ import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureSiteIndexes, getMongoClient } from "@/lib/mongodb";
+import { readSiteType } from "@/lib/siteTypes";
 import type { UpdateHistoryEntry } from "@/lib/updateHistory";
 
 const COLLECTION_NAME = "sites";
 
 interface SiteDocument {
   name: string;
+  /** Reference into siteTypes. Null when a site has not been categorised. */
+  type: ObjectId | null;
   createdAt: Date;
   createdBy: ObjectId | null;
   updateHistory: UpdateHistoryEntry[];
@@ -100,7 +103,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name } = body as Record<string, unknown>;
+    const { name, type } = body as Record<string, unknown>;
     const trimmedName = typeof name === "string" ? name.trim() : "";
 
     if (!trimmedName) {
@@ -108,6 +111,11 @@ export async function POST(request: NextRequest) {
         { error: "Site name is required." },
         { status: 400 },
       );
+    }
+
+    const parsedType = await readSiteType(db, type);
+    if ("error" in parsedType) {
+      return NextResponse.json({ error: parsedType.error }, { status: 400 });
     }
 
     await ensureSiteIndexes();
@@ -125,13 +133,18 @@ export async function POST(request: NextRequest) {
 
     const result = await collection.insertOne({
       name: trimmedName,
+      type: parsedType.type,
       createdAt: new Date(),
       createdBy: new ObjectId(authCheck.userId),
       updateHistory: [],
     });
 
     return NextResponse.json(
-      { _id: result.insertedId.toString(), name: trimmedName },
+      {
+        _id: result.insertedId.toString(),
+        name: trimmedName,
+        type: parsedType.type ? parsedType.type.toString() : null,
+      },
       { status: 201 },
     );
   } catch (error) {
