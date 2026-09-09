@@ -2,6 +2,7 @@ import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureTimeRangeIndexes, getMongoClient } from "@/lib/mongodb";
+import { DEFAULT_CURRENCY, formatPrice } from "@/lib/money";
 import {
   DUPLICATE_MESSAGE,
   formatTime,
@@ -19,6 +20,8 @@ interface TimeRangeDocument {
   interval: number;
   startMinutes: number;
   endMinutes: number;
+  priceCurrency: string;
+  priceCents: number;
   createdAt: Date;
   createdBy: ObjectId | null;
   updateHistory: UpdateHistoryEntry[];
@@ -105,11 +108,16 @@ export async function PUT(
         interval: current.interval,
         start: formatTime(current.startMinutes),
         end: formatTime(current.endMinutes),
+        price: formatPrice(
+          current.priceCents ?? 0,
+          current.priceCurrency ?? DEFAULT_CURRENCY,
+        ),
       },
       {
         interval: parsed.interval,
         start: formatTime(parsed.startMinutes),
         end: formatTime(parsed.endMinutes),
+        price: formatPrice(parsed.priceCents, parsed.priceCurrency),
       },
     );
 

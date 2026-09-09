@@ -1,3 +1,5 @@
+import { isCurrencyCode, readPrice } from "@/lib/money";
+
 export const MINUTES_PER_DAY = 24 * 60;
 export const HALF_HOUR_INTERVAL = 0.5;
 export const MAX_INTERVAL_HOURS = 24;
@@ -9,6 +11,11 @@ export interface TimeRangeInput {
   interval: number;
   startMinutes: number;
   endMinutes: number;
+}
+
+export interface TimeRangeFields extends TimeRangeInput {
+  priceCurrency: string;
+  priceCents: number;
 }
 
 /** An interval is half an hour, or a whole number of hours up to a day. */
@@ -171,12 +178,13 @@ export const DUPLICATE_MESSAGE =
  */
 export function readTimeRangeBody(
   body: unknown,
-): { error: string } | TimeRangeInput {
+): { error: string } | TimeRangeFields {
   if (typeof body !== "object" || body === null) {
     return { error: "Invalid request body." };
   }
 
-  const { interval, start, end } = body as Record<string, unknown>;
+  const { interval, start, end, currency, priceWhole, priceCents } =
+    body as Record<string, unknown>;
   const startMinutes = parseTime(start);
   const endMinutes = parseTime(end);
 
@@ -194,7 +202,22 @@ export function readTimeRangeBody(
     return { error };
   }
 
-  return { interval: numericInterval, startMinutes, endMinutes };
+  if (!isCurrencyCode(currency)) {
+    return { error: "Select a currency." };
+  }
+
+  const price = readPrice(priceWhole, priceCents);
+  if ("error" in price) {
+    return price;
+  }
+
+  return {
+    interval: numericInterval,
+    startMinutes,
+    endMinutes,
+    priceCurrency: currency,
+    priceCents: price.priceCents,
+  };
 }
 
 export interface RangeLike {

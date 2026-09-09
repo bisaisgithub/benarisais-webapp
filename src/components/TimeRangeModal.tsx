@@ -4,6 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import {
+  CURRENCIES,
+  DEFAULT_CURRENCY,
+  formatPrice,
+  joinPrice,
+  MAX_PRICE_WHOLE,
+  splitPrice,
+} from "@/lib/money";
+import {
   crossesMidnight,
   durationMinutes,
   formatDuration,
@@ -22,6 +30,8 @@ export interface TimeRangeValue {
   interval: number;
   start: string;
   end: string;
+  priceCurrency: string;
+  priceCents: number;
 }
 
 /** Add when no range is given, edit when one is. The form is the same. */
@@ -33,6 +43,17 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
   const [interval, setInterval] = useState(String(range?.interval ?? 1));
   const [start, setStart] = useState(range?.start ?? "");
   const [end, setEnd] = useState(range?.end ?? "");
+  const [currency, setCurrency] = useState(
+    range?.priceCurrency ?? DEFAULT_CURRENCY,
+  );
+  // Held as two strings so the fields can be cleared while typing; a price
+  // of zero is the default, not an absence.
+  const [priceWhole, setPriceWhole] = useState(
+    String(splitPrice(range?.priceCents ?? 0).whole),
+  );
+  const [priceCents, setPriceCents] = useState(
+    String(splitPrice(range?.priceCents ?? 0).cents).padStart(2, "0"),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -40,6 +61,11 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
     setInterval(String(range?.interval ?? 1));
     setStart(range?.start ?? "");
     setEnd(range?.end ?? "");
+    setCurrency(range?.priceCurrency ?? DEFAULT_CURRENCY);
+    setPriceWhole(String(splitPrice(range?.priceCents ?? 0).whole));
+    setPriceCents(
+      String(splitPrice(range?.priceCents ?? 0).cents).padStart(2, "0"),
+    );
     setSubmitError(null);
     setIsOpen(true);
   }
@@ -93,7 +119,19 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
       : "With a whole hour interval, times must be on the hour."
     : null;
 
+  const wholeNumber = Number(priceWhole);
+  const centsNumber = Number(priceCents);
+  const priceError =
+    !Number.isInteger(wholeNumber) ||
+    wholeNumber < 0 ||
+    wholeNumber > MAX_PRICE_WHOLE
+      ? `Price must be a whole number from 0 to ${MAX_PRICE_WHOLE.toLocaleString("en-US")}.`
+      : !Number.isInteger(centsNumber) || centsNumber < 0 || centsNumber > 99
+        ? "Cents must be a whole number from 0 to 99."
+        : null;
+
   const validationError =
+    priceError ??
     alignmentError ??
     (startMinutes === null || endMinutes === null
       ? null
@@ -140,6 +178,9 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
             interval: numericInterval,
             start,
             end,
+            currency,
+            priceWhole: wholeNumber,
+            priceCents: centsNumber,
           }),
         },
       );
@@ -282,6 +323,87 @@ export default function TimeRangeModal({ range }: { range?: TimeRangeValue }) {
                         className="mt-1 w-full rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="time-range-price-whole"
+                      className="block text-sm font-medium"
+                    >
+                      Slot price
+                    </label>
+                    <div className="mt-1 flex gap-2">
+                      <label htmlFor="time-range-currency" className="sr-only">
+                        Currency
+                      </label>
+                      <select
+                        id="time-range-currency"
+                        value={currency}
+                        onChange={(event) => setCurrency(event.target.value)}
+                        className="w-28 rounded-lg border border-foreground/15 bg-background px-2 py-2 text-sm outline-none focus:border-accent"
+                      >
+                        {CURRENCIES.map((option) => (
+                          <option key={option.code} value={option.code}>
+                            {option.symbol} {option.code}
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        id="time-range-price-whole"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={MAX_PRICE_WHOLE}
+                        step={1}
+                        value={priceWhole}
+                        onChange={(event) => setPriceWhole(event.target.value)}
+                        onBlur={(event) =>
+                          setPriceWhole(
+                            event.target.value.trim() === "" ? "0" : event.target.value,
+                          )
+                        }
+                        aria-label="Price, whole amount"
+                        className="min-w-0 flex-1 rounded-lg border border-foreground/15 bg-transparent px-3 py-2 text-right text-sm outline-none focus:border-accent"
+                      />
+
+                      <span className="self-center text-sm text-foreground/60">
+                        .
+                      </span>
+
+                      <label htmlFor="time-range-price-cents" className="sr-only">
+                        Price, cents
+                      </label>
+                      <input
+                        id="time-range-price-cents"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={99}
+                        step={1}
+                        value={priceCents}
+                        onChange={(event) => setPriceCents(event.target.value)}
+                        // Padded on blur so 5 reads as 05 — five cents, not
+                        // fifty — which is what a two-digit cents box means.
+                        onBlur={(event) =>
+                          setPriceCents(
+                            event.target.value.trim() === ""
+                              ? "00"
+                              : String(Number(event.target.value)).padStart(2, "0"),
+                          )
+                        }
+                        className="w-16 rounded-lg border border-foreground/15 bg-transparent px-2 py-2 text-sm outline-none focus:border-accent"
+                      />
+                    </div>
+                    {!priceError && (
+                      <p className="mt-1 text-xs text-foreground/50">
+                        {formatPrice(
+                          joinPrice(wholeNumber, centsNumber),
+                          currency,
+                        )}{" "}
+                        per booked slot.
+                      </p>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3 text-sm">

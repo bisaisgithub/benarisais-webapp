@@ -15,6 +15,7 @@ import {
   timeCondition,
 } from "@/lib/listFilters";
 import { getMongoClient } from "@/lib/mongodb";
+import { DEFAULT_CURRENCY, formatPrice } from "@/lib/money";
 import {
   crossesMidnight,
   durationMinutes,
@@ -46,6 +47,9 @@ interface TimeRangeRecord {
   interval: number;
   startMinutes: number;
   endMinutes: number;
+  /** Absent on ranges saved before slot pricing existed. */
+  priceCurrency?: string;
+  priceCents?: number;
   createdAt?: Date;
   createdBy?: unknown;
   updateHistory?: UpdateHistoryEntry[];
@@ -205,7 +209,7 @@ export default async function TimeRangesPage(
             <TableSearch />
 
             <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
-              <table className="w-full min-w-[560px] text-left text-sm">
+              <table className="w-full min-w-[680px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
                     <th className="px-4 py-3 font-medium">No.</th>
@@ -219,6 +223,7 @@ export default async function TimeRangesPage(
                       </th>
                     ))}
                     <th className="px-4 py-3 font-medium">Duration</th>
+                    <th className="px-4 py-3 font-medium">Slot price</th>
                     <th className="px-4 py-3 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -226,7 +231,7 @@ export default async function TimeRangesPage(
                   {ranges.length === 0 && (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-4 py-6 text-center text-sm text-foreground/60"
                       >
                         No time ranges match these filters.
@@ -273,6 +278,16 @@ export default async function TimeRangesPage(
                             ),
                           )}
                         </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {range.priceCents === undefined ? (
+                            <span className="text-foreground/40">—</span>
+                          ) : (
+                            formatPrice(
+                              range.priceCents,
+                              range.priceCurrency ?? DEFAULT_CURRENCY,
+                            )
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <TimeRangeModal
@@ -281,6 +296,9 @@ export default async function TimeRangesPage(
                                 interval: range.interval,
                                 start,
                                 end,
+                                priceCurrency:
+                                  range.priceCurrency ?? DEFAULT_CURRENCY,
+                                priceCents: range.priceCents ?? 0,
                               }}
                             />
                             <HistoryModal

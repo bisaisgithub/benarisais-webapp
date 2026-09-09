@@ -2,6 +2,7 @@ import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureTimeRangeIndexes, getMongoClient } from "@/lib/mongodb";
+import { DEFAULT_CURRENCY, formatPrice } from "@/lib/money";
 import {
   DUPLICATE_MESSAGE,
   formatInterval,
@@ -17,6 +18,8 @@ interface TimeRangeDocument {
   interval: number;
   startMinutes: number;
   endMinutes: number;
+  priceCurrency: string;
+  priceCents: number;
   createdAt: Date;
   createdBy: ObjectId | null;
   updateHistory: UpdateHistoryEntry[];
@@ -64,6 +67,10 @@ export async function GET(request: NextRequest) {
         endMinutes: range.endMinutes,
         label: `${formatTime(range.startMinutes)} – ${formatTime(range.endMinutes)}`,
         intervalLabel: formatInterval(range.interval),
+        priceLabel: formatPrice(
+          range.priceCents ?? 0,
+          range.priceCurrency ?? DEFAULT_CURRENCY,
+        ),
       })),
     });
   } catch (error) {
