@@ -486,7 +486,11 @@ function CurrentAvailability({ courts }: { courts: CourtSummary[] }) {
     court,
     text: describe(court),
   }));
-  const allSame = described.every(({ text }) => text === described[0].text);
+  // Collapsing is only worth it when it saves repeating the same line for
+  // several courts. One court is always named, so a save is never made
+  // without knowing which court it lands on.
+  const collapse =
+    courts.length > 1 && described.every(({ text }) => text === described[0].text);
 
   return (
     <div className="mt-3 rounded-xl border border-foreground/10 bg-foreground/5 p-3">
@@ -494,19 +498,15 @@ function CurrentAvailability({ courts }: { courts: CourtSummary[] }) {
         Currently saved
       </p>
 
-      {allSame ? (
+      {collapse ? (
         <p className="mt-1 text-sm">
           {described[0].text === "none" ? (
             <span className="text-foreground/60">
-              {courts.length === 1
-                ? "This court has no availability yet."
-                : "None of these courts have availability yet."}
+              None of these courts have availability yet.
             </span>
           ) : (
             <>
-              {courts.length > 1 && (
-                <span className="text-foreground/60">All {courts.length}: </span>
-              )}
+              <span className="text-foreground/60">All {courts.length}: </span>
               {described[0].text}
             </>
           )}
@@ -521,16 +521,17 @@ function CurrentAvailability({ courts }: { courts: CourtSummary[] }) {
               <span
                 className={text === "none" ? "text-foreground/40" : undefined}
               >
-                {text}
+                {text === "none" ? "no availability yet" : text}
               </span>
             </li>
           ))}
         </ul>
       )}
 
-      {!allSame && (
+      {courts.length > 1 && !collapse && (
         <p className="mt-1 text-xs text-foreground/50">
-          These courts differ — saving sets them all to the same availability.
+          These courts differ — saving sets the days you pick to the same
+          availability on all of them.
         </p>
       )}
     </div>
