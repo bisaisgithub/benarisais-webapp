@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import HistoryModal from "@/components/HistoryModal";
 import type { UpdateHistoryView } from "@/lib/updateHistory";
@@ -26,6 +27,7 @@ interface TypesModalProps {
  * because two would drift the moment either grew a field.
  */
 export default function TypesModal({ endpoint, title }: TypesModalProps) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [types, setTypes] = useState<NamedType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +39,11 @@ export default function TypesModal({ endpoint, title }: TypesModalProps) {
   const [editingText, setEditingText] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // The page that hosts this dialog renders on the server, so the type list it
+  // handed to its Add and Edit modals is a snapshot from page load. Adding or
+  // renaming a type here has to ask for that snapshot again, or the new type
+  // stays missing from those dropdowns until a full reload.
+  const hasChanges = useRef(false);
 
   function resetState() {
     setQuery("");
@@ -73,6 +80,10 @@ export default function TypesModal({ endpoint, title }: TypesModalProps) {
 
   function closeModal() {
     setIsOpen(false);
+    if (hasChanges.current) {
+      hasChanges.current = false;
+      router.refresh();
+    }
   }
 
   const trimmedQuery = query.trim();
@@ -107,6 +118,7 @@ export default function TypesModal({ endpoint, title }: TypesModalProps) {
           a.text.localeCompare(b.text),
         ),
       );
+      hasChanges.current = true;
       setQuery("");
     } catch (error) {
       setAddError(
@@ -150,6 +162,7 @@ export default function TypesModal({ endpoint, title }: TypesModalProps) {
           .map((type) => (type._id === editingId ? (data as NamedType) : type))
           .sort((a, b) => a.text.localeCompare(b.text)),
       );
+      hasChanges.current = true;
       cancelEdit();
     } catch (error) {
       setEditError(
