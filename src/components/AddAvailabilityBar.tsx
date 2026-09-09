@@ -29,6 +29,8 @@ interface TimeRangeOption extends RangeLike {
   _id: string;
   label: string;
   intervalLabel: string;
+  /** The range's slot price, already formatted with its currency symbol. */
+  priceLabel: string;
 }
 
 /**
@@ -342,10 +344,17 @@ export default function AddAvailabilityBar() {
                                     }
                                     className="h-4 w-4 accent-accent"
                                   />
-                                  <span className="flex-1">{option.label}</span>
+                                  <span className="flex-1 whitespace-nowrap">
+                                    {option.label}
+                                  </span>
                                   <span className="text-xs text-foreground/50">
                                     {option.intervalLabel}
                                     {blocker ? " · overlaps" : ""}
+                                  </span>
+                                  {/* The price is the one column that must
+                                      never break mid-value. */}
+                                  <span className="shrink-0 whitespace-nowrap text-xs font-medium tabular-nums text-foreground/70">
+                                    {option.priceLabel}
                                   </span>
                                 </label>
                               </li>
