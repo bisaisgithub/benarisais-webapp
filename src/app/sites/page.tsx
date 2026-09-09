@@ -209,7 +209,7 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                   endpoint="/api/sites/types"
                   title="Site Types"
                 />
-                <AddSiteModal availableTypes={siteTypes} />
+                <AddSiteModal />
               </>
             )}
             <PageSizeSelect pageSize={pageSize} basePath="/sites" />
@@ -291,7 +291,12 @@ export default async function SitesPage(props: PageProps<"/sites">) {
                                   id={id}
                                   name={site.name}
                                   type={site.type ? String(site.type) : ""}
-                                  availableTypes={siteTypes}
+                                  typeText={
+                                    site.type
+                                      ? (typeTextById.get(String(site.type)) ??
+                                        "")
+                                      : ""
+                                  }
                                 />
                                 <HistoryModal
                                   title={site.name}

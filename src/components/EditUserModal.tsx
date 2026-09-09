@@ -23,7 +23,6 @@ interface EditUserModalProps {
   contact: string | null;
   message: string;
   typeIds: string[];
-  availableTypes: UserTypeOption[];
 }
 
 export default function EditUserModal({
@@ -33,10 +32,12 @@ export default function EditUserModal({
   contact: initialContact,
   message: initialMessage,
   typeIds: initialTypeIds,
-  availableTypes,
 }: EditUserModalProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [availableTypes, setAvailableTypes] = useState<UserTypeOption[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+  const [typesError, setTypesError] = useState<string | null>(null);
 
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail ?? "");
@@ -62,7 +63,31 @@ export default function EditUserModal({
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
+  /**
+   * Read on every open rather than held from the page render: another admin,
+   * on another device, may have added a type since this page loaded.
+   */
+  async function loadTypes() {
+    setIsLoadingTypes(true);
+    setTypesError(null);
+    try {
+      const response = await fetch("/api/users/types");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not load types.");
+      }
+      setAvailableTypes(Array.isArray(data?.types) ? data.types : []);
+    } catch (error) {
+      setTypesError(
+        error instanceof Error ? error.message : "Could not load types.",
+      );
+    } finally {
+      setIsLoadingTypes(false);
+    }
+  }
+
   function openModal() {
+    setAvailableTypes([]);
     setName(initialName);
     setEmail(initialEmail ?? "");
     setContact((initialContact as PhoneValue) || undefined);
@@ -78,6 +103,7 @@ export default function EditUserModal({
     setPasswordError(null);
     setPasswordSuccess(false);
     setIsOpen(true);
+    loadTypes();
   }
 
   function closeModal() {
@@ -405,7 +431,13 @@ export default function EditUserModal({
 
                   <div className="flex flex-col gap-1">
                     <span className="text-sm font-medium">Types</span>
-                    {availableTypes.length === 0 ? (
+                    {isLoadingTypes ? (
+                      <p className="text-xs text-foreground/60">
+                        Loading types…
+                      </p>
+                    ) : typesError ? (
+                      <p className="text-xs text-red-500">{typesError}</p>
+                    ) : availableTypes.length === 0 ? (
                       <p className="text-xs text-foreground/60">
                         No types yet. Add some from the Types button.
                       </p>

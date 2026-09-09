@@ -9,25 +9,49 @@ export interface SiteTypeOption {
   text: string;
 }
 
-export default function AddSiteModal({
-  availableTypes,
-}: {
-  availableTypes: SiteTypeOption[];
-}) {
+export default function AddSiteModal() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState("");
+  const [availableTypes, setAvailableTypes] = useState<SiteTypeOption[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+  const [typesError, setTypesError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  /**
+   * Read on every open rather than held from the page render: another admin,
+   * on another device, may have added a type since this page loaded.
+   */
+  async function loadTypes() {
+    setIsLoadingTypes(true);
+    setTypesError(null);
+    try {
+      const response = await fetch("/api/sites/types");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not load types.");
+      }
+      setAvailableTypes(Array.isArray(data?.types) ? data.types : []);
+    } catch (error) {
+      setTypesError(
+        error instanceof Error ? error.message : "Could not load types.",
+      );
+    } finally {
+      setIsLoadingTypes(false);
+    }
+  }
 
   function openModal() {
     setName("");
     setType("");
     setNameError(null);
     setSubmitError(null);
+    setAvailableTypes([]);
     setIsOpen(true);
+    loadTypes();
   }
 
   function closeModal() {
@@ -153,15 +177,21 @@ export default function AddSiteModal({
                       id="add-site-type"
                       value={type}
                       onChange={(event) => setType(event.target.value)}
-                      className="mt-1 w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                      disabled={isLoadingTypes}
+                      className="mt-1 w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-60"
                     >
-                      <option value="">No type</option>
+                      <option value="">
+                        {isLoadingTypes ? "Loading types…" : "No type"}
+                      </option>
                       {availableTypes.map((option) => (
                         <option key={option._id} value={option._id}>
                           {option.text}
                         </option>
                       ))}
                     </select>
+                    {typesError && (
+                      <p className="mt-1 text-xs text-red-500">{typesError}</p>
+                    )}
                   </div>
 
                   {submitError && (

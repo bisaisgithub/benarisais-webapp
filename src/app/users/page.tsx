@@ -323,7 +323,6 @@ export default async function UsersPage(props: PageProps<"/users">) {
                               contact={user.contact}
                               message={user.message}
                               typeIds={typeIds}
-                              availableTypes={availableTypes}
                             />
                             <HistoryModal
                               title={user.name}

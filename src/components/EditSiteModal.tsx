@@ -1,41 +1,82 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+
+interface SiteTypeOption {
+  _id: string;
+  text: string;
+}
 
 interface EditSiteModalProps {
   id: string;
   name: string;
   type: string;
-  availableTypes: { _id: string; text: string }[];
+  /** The current type's name, shown until the full list arrives. */
+  typeText: string;
 }
 
 export default function EditSiteModal({
   id,
   name: initialName,
   type: initialType,
-  availableTypes,
+  typeText,
 }: EditSiteModalProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState(initialName);
   const [type, setType] = useState(initialType);
+  const [availableTypes, setAvailableTypes] = useState<SiteTypeOption[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+  const [typesError, setTypesError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  /**
+   * Read on every open rather than held from the page render: another admin,
+   * on another device, may have added a type since this page loaded.
+   */
+  async function loadTypes() {
+    setIsLoadingTypes(true);
+    setTypesError(null);
+    try {
+      const response = await fetch("/api/sites/types");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not load types.");
+      }
+      setAvailableTypes(Array.isArray(data?.types) ? data.types : []);
+    } catch (error) {
+      setTypesError(
+        error instanceof Error ? error.message : "Could not load types.",
+      );
+    } finally {
+      setIsLoadingTypes(false);
+    }
+  }
 
   function openModal() {
     setName(initialName);
     setType(initialType);
     setNameError(null);
     setSubmitError(null);
+    setAvailableTypes([]);
     setIsOpen(true);
+    loadTypes();
   }
 
   function closeModal() {
     setIsOpen(false);
   }
+
+  const typeOptions = useMemo(() => {
+    if (availableTypes.length > 0) return availableTypes;
+    // Until the list arrives the site's own type is all we know, and showing
+    // nothing would read as "No type" against a site that has one.
+    return initialType ? [{ _id: initialType, text: typeText }] : [];
+  }, [availableTypes, initialType, typeText]);
 
   function validateName(value: string) {
     const error = value.trim().length > 0 ? null : "Site name is required.";
@@ -154,15 +195,21 @@ export default function EditSiteModal({
                       id={`edit-site-type-${id}`}
                       value={type}
                       onChange={(event) => setType(event.target.value)}
-                      className="mt-1 w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                      disabled={isLoadingTypes}
+                      className="mt-1 w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-60"
                     >
-                      <option value="">No type</option>
-                      {availableTypes.map((option) => (
+                      <option value="">
+                        {isLoadingTypes ? "Loading types…" : "No type"}
+                      </option>
+                      {typeOptions.map((option) => (
                         <option key={option._id} value={option._id}>
                           {option.text}
                         </option>
                       ))}
                     </select>
+                    {typesError && (
+                      <p className="mt-1 text-xs text-red-500">{typesError}</p>
+                    )}
                   </div>
 
                   {submitError && (

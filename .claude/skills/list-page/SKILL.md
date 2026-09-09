@@ -44,7 +44,7 @@ work.
 **5. Verify before reporting done.** `npm run lint` and `npm run build` clean,
 then exercise it — see Verifying below.
 
-## The four things most easily got wrong
+## The things most easily got wrong
 
 **Authorization is backend-only.** Both endpoints repeat
 `getAuthenticatedUserId` then `isAdmin` on every request, before parsing the
@@ -64,6 +64,13 @@ the unique index behind it is what actually closes the race. Handle
 column filter feed the same count and find that drive pagination, so the row
 count and page count describe the filtered result. Count before clamping the
 page, and make the pagination links carry the search and every filter.
+
+**Nothing is held in memory; lists are always fetched.** A modal that offers a
+list to choose from fetches it in `openModal()` every time, never as a prop
+from the server render. Several admins on several devices share this data, so
+anything captured at page load is stale as soon as someone else adds to it —
+and no cache is a shortcut past that. Keep the record's existing value visible
+while the fetch is in flight.
 
 **Filter state has one owner.** `ListFilters` holds every value on the page and
 makes a single URL update. A component that pushes its own copy of the query

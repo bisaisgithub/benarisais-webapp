@@ -240,6 +240,19 @@ Whichever way, each modal:
 A form whose values sit on a grid (times, steps) must **snap the value**, not
 just set an `step` attribute — `step` does not constrain typed input.
 
+A modal that offers a **list to choose from** (types, sites, time ranges)
+fetches that list in `openModal()`, every time. It must not take the list as a
+prop from the server render: pages render once, and several admins on several
+devices are using this at the same time, so a list captured at page load is
+already out of date the moment anyone else adds to it. `AddSiteModal`,
+`EditSiteModal`, `EditUserModal`, `AddCourtsModal` and `AddAvailabilityBar` all
+work this way.
+
+While that fetch is in flight, keep any value the record already holds
+visible — an edit form that shows "No type" for a moment reads as data loss.
+`EditSiteModal` does this by falling back to a single option built from the
+record's own type name.
+
 ## Nav
 
 Add a `<Link>` in `src/components/Navbar.tsx` inside `<MobileMenu>`, matching
