@@ -7,6 +7,9 @@ import PhoneInput, {
   isValidPhoneNumber,
   type Value as PhoneValue,
 } from "react-phone-number-input";
+import MultiSelectSearch, {
+  type MultiSelectOption,
+} from "@/components/MultiSelectSearch";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
@@ -23,6 +26,7 @@ interface EditUserModalProps {
   contact: string | null;
   message: string;
   typeIds: string[];
+  siteIds: string[];
 }
 
 export default function EditUserModal({
@@ -32,12 +36,19 @@ export default function EditUserModal({
   contact: initialContact,
   message: initialMessage,
   typeIds: initialTypeIds,
+  siteIds: initialSiteIds,
 }: EditUserModalProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [availableTypes, setAvailableTypes] = useState<UserTypeOption[]>([]);
   const [isLoadingTypes, setIsLoadingTypes] = useState(false);
   const [typesError, setTypesError] = useState<string | null>(null);
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>(
+    initialSiteIds,
+  );
+  const [availableSites, setAvailableSites] = useState<MultiSelectOption[]>([]);
+  const [isLoadingSites, setIsLoadingSites] = useState(false);
+  const [sitesError, setSitesError] = useState<string | null>(null);
 
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail ?? "");
@@ -86,8 +97,37 @@ export default function EditUserModal({
     }
   }
 
+  /** Read on every open, for the same reason the type list is. */
+  async function loadSites() {
+    setIsLoadingSites(true);
+    setSitesError(null);
+    try {
+      const response = await fetch("/api/sites");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not load sites.");
+      }
+      setAvailableSites(
+        (Array.isArray(data?.sites) ? data.sites : []).map(
+          (site: { _id: string; name: string }) => ({
+            _id: site._id,
+            label: site.name,
+          }),
+        ),
+      );
+    } catch (error) {
+      setSitesError(
+        error instanceof Error ? error.message : "Could not load sites.",
+      );
+    } finally {
+      setIsLoadingSites(false);
+    }
+  }
+
   function openModal() {
     setAvailableTypes([]);
+    setAvailableSites([]);
+    setSelectedSiteIds(initialSiteIds);
     setName(initialName);
     setEmail(initialEmail ?? "");
     setContact((initialContact as PhoneValue) || undefined);
@@ -104,6 +144,7 @@ export default function EditUserModal({
     setPasswordSuccess(false);
     setIsOpen(true);
     loadTypes();
+    loadSites();
   }
 
   function closeModal() {
@@ -234,6 +275,7 @@ export default function EditUserModal({
           contact: contact ?? "",
           message: message.trim(),
           types: selectedTypeIds,
+          sites: selectedSiteIds,
         }),
       });
 
@@ -458,6 +500,30 @@ export default function EditUserModal({
                           </label>
                         ))}
                       </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label
+                      htmlFor={`edit-user-sites-${id}`}
+                      className="text-sm font-medium"
+                    >
+                      Sites
+                    </label>
+                    <MultiSelectSearch
+                      id={`edit-user-sites-${id}`}
+                      options={availableSites}
+                      value={selectedSiteIds}
+                      onChange={setSelectedSiteIds}
+                      isLoading={isLoadingSites}
+                      loadError={sitesError}
+                      placeholder="Select sites"
+                      searchPlaceholder="Search sites…"
+                      emptyLabel="No sites yet. Add some on the Sites page."
+                      loadingLabel="Loading sites…"
+                    />
+                    {sitesError && (
+                      <p className="text-xs text-red-500">{sitesError}</p>
                     )}
                   </div>
 

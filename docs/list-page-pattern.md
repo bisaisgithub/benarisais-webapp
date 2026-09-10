@@ -240,6 +240,11 @@ Whichever way, each modal:
 A form whose values sit on a grid (times, steps) must **snap the value**, not
 just set an `step` attribute — `step` does not constrain typed input.
 
+A field that picks **several** of something uses `MultiSelectSearch`: a
+dropdown with a search box, the chosen values shown in the control as pills
+that can be removed one at a time. It holds no list of its own — the caller
+passes the options in and re-fetches them on open, per the rule below.
+
 A modal that offers a **list to choose from** (types, sites, time ranges)
 fetches that list in `openModal()`, every time. It must not take the list as a
 prop from the server render: pages render once, and several admins on several

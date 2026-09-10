@@ -31,7 +31,7 @@ forces rework later, so if the request is ambiguous on any of them — and
 especially on uniqueness — ask rather than guess.
 
 **3. Reuse what is shared.** `HistoryModal`, `PageSizeSelect`, `ListFilters`,
-`ColumnFilter`, `TableSearch`, `LocalDate` and everything in
+`ColumnFilter`, `TableSearch`, `LocalDate`, `MultiSelectSearch` and everything in
 `src/lib/updateHistory.ts` and `src/lib/listFilters.ts` are shared across all
 four pages. Never fork them. Only the page, the two endpoints and the entity's
 own modals are new.

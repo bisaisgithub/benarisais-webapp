@@ -46,6 +46,7 @@ interface UserRecord {
   message: string;
   createdAt: Date;
   types?: unknown[];
+  sites?: unknown[];
   createdBy?: unknown;
   updateHistory?: UpdateHistoryEntry[];
 }
@@ -323,6 +324,9 @@ export default async function UsersPage(props: PageProps<"/users">) {
                               contact={user.contact}
                               message={user.message}
                               typeIds={typeIds}
+                              siteIds={(user.sites ?? []).map((siteId) =>
+                                String(siteId),
+                              )}
                             />
                             <HistoryModal
                               title={user.name}

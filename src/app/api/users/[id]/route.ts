@@ -6,6 +6,7 @@ import { MongoServerError, ObjectId } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureUserIndexes, getMongoClient } from "@/lib/mongodb";
+import { readSiteIds, resolveSites } from "@/lib/sites";
 import {
   diffChanges,
   pushUpdateHistory,
@@ -22,6 +23,8 @@ interface UserDocument {
   contact: string | null;
   message: string;
   types?: ObjectId[];
+  /** Sites this user is attached to. References into the sites collection. */
+  sites?: ObjectId[];
   password?: string;
   createdAt?: Date;
   createdBy?: ObjectId | null;
@@ -67,7 +70,7 @@ export async function PUT(
     );
   }
 
-  const { name, email, contact, message, types } = body as Record<
+  const { name, email, contact, message, types, sites } = body as Record<
     string,
     unknown
   >;
@@ -130,6 +133,11 @@ export async function PUT(
       );
     }
 
+    const parsedSites = await readSiteIds(db, sites);
+    if ("error" in parsedSites) {
+      return NextResponse.json({ error: parsedSites.error }, { status: 400 });
+    }
+
     await ensureUserIndexes();
 
     const collection = db.collection<UserDocument>(COLLECTION_NAME);
@@ -175,10 +183,13 @@ export async function PUT(
 
     // Types are recorded by their text rather than their id, so history stays
     // readable even after a type is renamed.
-    const [currentTypeTexts, nextTypeTexts] = await Promise.all([
-      resolveUserTypes(db, current.types),
-      resolveUserTypes(db, typeIds),
-    ]);
+    const [currentTypeTexts, nextTypeTexts, currentSites, nextSites] =
+      await Promise.all([
+        resolveUserTypes(db, current.types),
+        resolveUserTypes(db, typeIds),
+        resolveSites(db, current.sites),
+        resolveSites(db, parsedSites.siteIds),
+      ]);
 
     const changes = diffChanges(
       {
@@ -187,6 +198,7 @@ export async function PUT(
         contact: current.contact,
         message: current.message,
         types: currentTypeTexts.map((type) => type.text),
+        sites: currentSites.map((site) => site.name),
       },
       {
         name: name.trim(),
@@ -194,6 +206,7 @@ export async function PUT(
         contact: trimmedContact || null,
         message: message.trim(),
         types: nextTypeTexts.map((type) => type.text),
+        sites: nextSites.map((site) => site.name),
       },
     );
 
@@ -206,6 +219,7 @@ export async function PUT(
           contact: trimmedContact || null,
           message: message.trim(),
           types: typeIds.map((typeId: string) => new ObjectId(typeId)),
+          sites: parsedSites.siteIds,
         },
         // Skipped when nothing moved, so a no-op save can't push real edits
         // out of the capped history.
@@ -227,6 +241,7 @@ export async function PUT(
       contact: result.contact,
       message: result.message,
       types: (result.types ?? []).map((typeId: ObjectId) => typeId.toString()),
+      sites: (result.sites ?? []).map((siteId: ObjectId) => siteId.toString()),
     });
   } catch (error) {
     if (error instanceof MongoServerError && error.code === 11000) {
