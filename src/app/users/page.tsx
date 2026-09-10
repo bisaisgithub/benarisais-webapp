@@ -37,6 +37,7 @@ const USER_FILTER_COLUMNS = [
   { heading: "Contact", column: { key: "contact", label: "contact", placeholder: "Search contact…" } },
   { heading: "Message", column: { key: "message", label: "message", placeholder: "Search message…" } },
   { heading: "Types", column: { key: "type", label: "type", placeholder: "Search type…" } },
+  { heading: "Sites", column: { key: "site", label: "site", placeholder: "Search site…" } },
 ] as const;
 
 interface UserRecord {
@@ -53,6 +54,10 @@ interface UserRecord {
 
 interface UserTypeRecord {
   text: string;
+}
+
+interface SiteRecord {
+  name: string;
 }
 
 function firstValue(value: string | string[] | undefined) {
@@ -91,11 +96,13 @@ export default async function UsersPage(props: PageProps<"/users">) {
     contact: filterValue(resolvedSearchParams.contact),
     message: filterValue(resolvedSearchParams.message),
     type: filterValue(resolvedSearchParams.type),
+    site: filterValue(resolvedSearchParams.site),
   };
   const hasFilters = Boolean(search) || Object.values(filters).some(Boolean);
 
   let users: (UserRecord & { _id: unknown })[] = [];
   let userTypes: (UserTypeRecord & { _id: unknown })[] = [];
+  let sites: (SiteRecord & { _id: unknown })[] = [];
   let actorNames = new Map<string, string>();
   let total = 0;
   let page = requestedPage;
@@ -133,6 +140,15 @@ export default async function UsersPage(props: PageProps<"/users">) {
               .toArray()
           ).map((type) => type._id);
 
+        // sites holds ids too, and is resolved the same way.
+        const siteIdsMatching = async (text: string) =>
+          (
+            await db
+              .collection<SiteRecord>("sites")
+              .find({ name: textCondition(text) })
+              .toArray()
+          ).map((site) => site._id);
+
         const filter: Record<string, unknown> = {};
         for (const field of ["name", "email", "contact", "message"] as const) {
           if (filters[field]) {
@@ -141,6 +157,9 @@ export default async function UsersPage(props: PageProps<"/users">) {
         }
         if (filters.type) {
           filter.types = { $in: await typeIdsMatching(filters.type) };
+        }
+        if (filters.site) {
+          filter.sites = { $in: await siteIdsMatching(filters.site) };
         }
         if (search) {
           // One box across every field, for when you know a fragment but not
@@ -152,6 +171,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
             { contact: textCondition(search) },
             { message: textCondition(search) },
             { types: { $in: await typeIdsMatching(search) } },
+            { sites: { $in: await siteIdsMatching(search) } },
           ];
         }
 
@@ -174,6 +194,12 @@ export default async function UsersPage(props: PageProps<"/users">) {
           .sort({ text: 1 })
           .toArray();
 
+        sites = await db
+          .collection<SiteRecord>("sites")
+          .find()
+          .sort({ name: 1 })
+          .toArray();
+
         actorNames = await resolveActorNames(
           db,
           users.flatMap((user) => actorIdsOf(user)),
@@ -191,6 +217,9 @@ export default async function UsersPage(props: PageProps<"/users">) {
   }));
   const typeTextById = new Map(
     availableTypes.map((type) => [type._id, type.text]),
+  );
+  const siteNameById = new Map(
+    sites.map((site) => [String(site._id), site.name]),
   );
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -242,7 +271,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
             <TableSearch />
 
             <div className="mt-4 overflow-x-auto rounded-2xl border border-foreground/10">
-              <table className="w-full min-w-[700px] text-left text-sm">
+              <table className="w-full min-w-[860px] text-left text-sm">
                 <thead className="border-b border-foreground/10 bg-foreground/5">
                   <tr>
                     <th className="px-4 py-3 font-medium">No.</th>
@@ -263,7 +292,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
                   {users.length === 0 && (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="px-4 py-6 text-center text-sm text-foreground/60"
                       >
                         No registrations match these filters.
@@ -278,6 +307,12 @@ export default async function UsersPage(props: PageProps<"/users">) {
                     const typeTexts = typeIds
                       .map((typeId) => typeTextById.get(typeId))
                       .filter((text): text is string => Boolean(text));
+                    const siteIds = (user.sites ?? []).map((siteId) =>
+                      String(siteId),
+                    );
+                    const siteNames = siteIds
+                      .map((siteId) => siteNameById.get(siteId))
+                      .filter((name): name is string => Boolean(name));
 
                     return (
                       <tr
@@ -312,6 +347,22 @@ export default async function UsersPage(props: PageProps<"/users">) {
                             </div>
                           )}
                         </td>
+                        <td className="px-4 py-3">
+                          {siteNames.length === 0 ? (
+                            "—"
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {siteNames.map((name) => (
+                                <span
+                                  key={name}
+                                  className="inline-flex items-center rounded-full bg-foreground/10 px-2 py-0.5 text-xs text-foreground/70"
+                                >
+                                  {name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3 text-foreground/60">
                           <LocalDate value={user.createdAt.toISOString()} />
                         </td>
@@ -324,9 +375,7 @@ export default async function UsersPage(props: PageProps<"/users">) {
                               contact={user.contact}
                               message={user.message}
                               typeIds={typeIds}
-                              siteIds={(user.sites ?? []).map((siteId) =>
-                                String(siteId),
-                              )}
+                              siteIds={siteIds}
                             />
                             <HistoryModal
                               title={user.name}
