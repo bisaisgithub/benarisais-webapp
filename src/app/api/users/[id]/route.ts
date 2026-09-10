@@ -4,7 +4,7 @@ import {
 } from "libphonenumber-js";
 import { MongoServerError, ObjectId } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
+import { authErrorResponse, getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureUserIndexes, getMongoClient } from "@/lib/mongodb";
 import { readSiteIds, resolveSites } from "@/lib/sites";
 import {
@@ -41,10 +41,7 @@ export async function PUT(
 ) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
-    return NextResponse.json(
-      { error: authCheck.error },
-      { status: authCheck.status },
-    );
+    return authErrorResponse(authCheck);
   }
 
   const { id } = await context.params;

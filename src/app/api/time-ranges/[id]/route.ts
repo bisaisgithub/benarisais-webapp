@@ -1,6 +1,6 @@
 import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
+import { authErrorResponse, getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureTimeRangeIndexes, getMongoClient } from "@/lib/mongodb";
 import { DEFAULT_CURRENCY, formatPrice } from "@/lib/money";
 import {
@@ -40,10 +40,7 @@ export async function PUT(
 ) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
-    return NextResponse.json(
-      { error: authCheck.error },
-      { status: authCheck.status },
-    );
+    return authErrorResponse(authCheck);
   }
 
   const { id } = await context.params;

@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
+import { authErrorResponse, getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
 import {
   pushUpdateHistory,
@@ -23,10 +23,7 @@ export async function PUT(
 ) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
-    return NextResponse.json(
-      { error: authCheck.error },
-      { status: authCheck.status },
-    );
+    return authErrorResponse(authCheck);
   }
 
   const { id } = await context.params;

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { apiFetch } from "@/lib/apiFetch";
 
 const MAX_COURTS_PER_ADD = 100;
 const PREVIEW_LIMIT = 20;
@@ -30,7 +31,7 @@ export default function AddCourtsModal() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch("/api/courts/summary");
+      const response = await apiFetch("/api/courts/summary");
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(data?.error || "Could not load sites.");
@@ -94,7 +95,7 @@ export default function AddCourtsModal() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await fetch("/api/courts", {
+      const response = await apiFetch("/api/courts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ siteId, count: parsedCount }),

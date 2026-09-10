@@ -10,6 +10,7 @@ import PhoneInput, {
 import MultiSelectSearch, {
   type MultiSelectOption,
 } from "@/components/MultiSelectSearch";
+import { apiFetch } from "@/lib/apiFetch";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
@@ -82,7 +83,7 @@ export default function EditUserModal({
     setIsLoadingTypes(true);
     setTypesError(null);
     try {
-      const response = await fetch("/api/users/types");
+      const response = await apiFetch("/api/users/types");
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(data?.error || "Could not load types.");
@@ -102,7 +103,7 @@ export default function EditUserModal({
     setIsLoadingSites(true);
     setSitesError(null);
     try {
-      const response = await fetch("/api/sites");
+      const response = await apiFetch("/api/sites");
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(data?.error || "Could not load sites.");
@@ -217,7 +218,7 @@ export default function EditUserModal({
     setIsResettingPassword(true);
 
     try {
-      const response = await fetch(`/api/users/${id}/password`, {
+      const response = await apiFetch(`/api/users/${id}/password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: newPassword }),
@@ -266,7 +267,7 @@ export default function EditUserModal({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/users/${id}`, {
+      const response = await apiFetch(`/api/users/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface SiteTypeOption {
   _id: string;
@@ -42,7 +43,7 @@ export default function EditSiteModal({
     setIsLoadingTypes(true);
     setTypesError(null);
     try {
-      const response = await fetch("/api/sites/types");
+      const response = await apiFetch("/api/sites/types");
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(data?.error || "Could not load types.");
@@ -94,7 +95,7 @@ export default function EditSiteModal({
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await fetch(`/api/sites/${id}`, {
+      const response = await apiFetch(`/api/sites/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), type: type || null }),

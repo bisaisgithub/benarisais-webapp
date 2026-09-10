@@ -68,7 +68,20 @@ export async function logout(): Promise<void> {
  * refresh. Clears the cached profile if the refresh token itself is invalid
  * or expired. Returns whether it succeeded.
  */
-export async function refreshSession(): Promise<boolean> {
+export function refreshSession(): Promise<boolean> {
+  // Several requests can fail at once — a page's worth of modals opening
+  // together, say. They should renew once between them, not once each.
+  if (!inFlightRefresh) {
+    inFlightRefresh = runRefresh().finally(() => {
+      inFlightRefresh = null;
+    });
+  }
+  return inFlightRefresh;
+}
+
+let inFlightRefresh: Promise<boolean> | null = null;
+
+async function runRefresh(): Promise<boolean> {
   try {
     const response = await fetch("/api/auth/refresh", { method: "POST" });
 

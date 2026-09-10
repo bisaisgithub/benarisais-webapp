@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
 import { setAccessTokenCookie } from "@/lib/authCookies";
-import { getAuthenticatedUserId } from "@/lib/authz";
+import { authErrorResponse, getAuthenticatedUserId } from "@/lib/authz";
 import { signAccessToken } from "@/lib/jwt";
 import { getMongoClient } from "@/lib/mongodb";
 import { resolveUserTypes } from "@/lib/userTypes";
@@ -18,10 +18,7 @@ interface UserDocument {
 export async function PUT(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
-    return NextResponse.json(
-      { error: authCheck.error },
-      { status: authCheck.status },
-    );
+    return authErrorResponse(authCheck);
   }
   const { userId } = authCheck;
 

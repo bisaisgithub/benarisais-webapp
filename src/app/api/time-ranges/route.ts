@@ -1,6 +1,6 @@
 import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
+import { authErrorResponse, getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { ensureTimeRangeIndexes, getMongoClient } from "@/lib/mongodb";
 import { DEFAULT_CURRENCY, formatPrice } from "@/lib/money";
 import {
@@ -38,10 +38,7 @@ async function getDb(): Promise<Db> {
 export async function GET(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
-    return NextResponse.json(
-      { error: authCheck.error },
-      { status: authCheck.status },
-    );
+    return authErrorResponse(authCheck);
   }
 
   try {
@@ -85,10 +82,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
-    return NextResponse.json(
-      { error: authCheck.error },
-      { status: authCheck.status },
-    );
+    return authErrorResponse(authCheck);
   }
 
   try {

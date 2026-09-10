@@ -18,6 +18,7 @@ import {
   subscribeAuth,
   type AuthUser,
 } from "@/lib/authClient";
+import { apiFetch } from "@/lib/apiFetch";
 
 /** Comfortably inside the fifteen-minute access token lifetime. */
 const REFRESH_EVERY_MS = 10 * 60 * 1000;
@@ -100,7 +101,7 @@ export default function LoginModal() {
     setSwitchTypeError(null);
 
     try {
-      const response = await fetch("/api/auth/active-type", {
+      const response = await apiFetch("/api/auth/active-type", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ typeId }),

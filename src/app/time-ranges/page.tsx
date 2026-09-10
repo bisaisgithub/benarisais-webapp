@@ -36,6 +36,10 @@ const DEFAULT_PAGE_SIZE = 10;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
 const ADMIN_ACCESS_REQUIRED_MESSAGE = "Admin access required.";
+// src/proxy.ts renews a lapsed access token before this page renders, so a
+// token that still fails here means the session is genuinely over — not that
+// the account lacks admin rights.
+const SESSION_ENDED_MESSAGE = "Your session has ended. Please sign in again.";
 
 /** Filterable columns, in table order. The key is also the URL parameter. */
 const TIME_RANGE_FILTER_COLUMNS = [
@@ -108,7 +112,7 @@ export default async function TimeRangesPage(
   );
 
   if ("error" in authCheck) {
-    errorMessage = ADMIN_ACCESS_REQUIRED_MESSAGE;
+    errorMessage = SESSION_ENDED_MESSAGE;
     sessionExpired = true;
   } else {
     try {

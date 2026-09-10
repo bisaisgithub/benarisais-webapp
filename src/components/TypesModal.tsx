@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import HistoryModal from "@/components/HistoryModal";
 import type { UpdateHistoryView } from "@/lib/updateHistory";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface NamedType {
   _id: string;
@@ -57,7 +58,7 @@ export default function TypesModal({ endpoint, title }: TypesModalProps) {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch(endpoint);
+      const response = await apiFetch(endpoint);
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(data?.error || "Could not load types.");
@@ -104,7 +105,7 @@ export default function TypesModal({ endpoint, title }: TypesModalProps) {
     setIsAdding(true);
     setAddError(null);
     try {
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: trimmedQuery }),
@@ -148,7 +149,7 @@ export default function TypesModal({ endpoint, title }: TypesModalProps) {
     setIsSavingEdit(true);
     setEditError(null);
     try {
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: editingId, text: trimmedEditingText }),

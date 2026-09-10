@@ -24,6 +24,7 @@ import {
   weekdayShort,
   type Weekday,
 } from "@/lib/weekdays";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface TimeRangeOption extends RangeLike {
   _id: string;
@@ -62,7 +63,7 @@ export default function AddAvailabilityBar() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch("/api/time-ranges");
+      const response = await apiFetch("/api/time-ranges");
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(data?.error || "Could not load time ranges.");
@@ -132,7 +133,7 @@ export default function AddAvailabilityBar() {
     setIsSaving(true);
     setSaveError(null);
     try {
-      const response = await fetch("/api/courts/availability", {
+      const response = await apiFetch("/api/courts/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

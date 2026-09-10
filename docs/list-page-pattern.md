@@ -48,6 +48,16 @@ duplicate cannot take the app down.
 
 ## Security
 
+**Sessions renew themselves.** `src/proxy.ts` runs before anything else and
+mints a new access token when the old one has lapsed and the refresh token is
+still good — writing it onto both the outgoing response and the request being
+handled, so the page about to render already sees a signed-in user. A page
+therefore never has to apologise for an expired token, and "Admin access
+required." means what it says. Client calls go through `apiFetch`
+(`src/lib/apiFetch.ts`), which renews once and retries a 401 — never a 403,
+which is a real answer.
+
+
 **Authorization is enforced in the backend only. Never gate in client code.**
 
 Both endpoints repeat the same two checks on every request, in this order —

@@ -1,6 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuthenticatedUserId, isAdmin } from "@/lib/authz";
+import { authErrorResponse, getAuthenticatedUserId, isAdmin } from "@/lib/authz";
 import { getMongoClient } from "@/lib/mongodb";
 import {
   durationMinutes,
@@ -77,10 +77,7 @@ function readIds(value: unknown, max: number): string[] | null {
 export async function POST(request: NextRequest) {
   const authCheck = getAuthenticatedUserId(request);
   if ("error" in authCheck) {
-    return NextResponse.json(
-      { error: authCheck.error },
-      { status: authCheck.status },
-    );
+    return authErrorResponse(authCheck);
   }
 
   try {
